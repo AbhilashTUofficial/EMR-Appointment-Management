@@ -194,6 +194,8 @@ After arrive, cancel or complete, the client refetches the appointment lists, th
 
 **Rooms decide who hears what.** On connect, receptionists and admins join one shared room and each doctor joins a room of their own. An appointment event goes to the shared room and to that appointment's doctor, so a doctor never hears about someone else's patients.
 
+**Saving a schedule is announced too.** Changing a doctor's schedule changes the slots an open scheduler should show, so it sends a `schedule:updated` event with just the doctor's id, and open screens refetch their slots and the doctor list.
+
 **Events are sent after the database write succeeds,** from the service that made the change. A request that fails (for example a booking that loses the race for a slot) sends nothing. A test checks this.
 
 **Authentication.** The connection must present a valid access token, verified once at connect time with the same code the API uses. The client passes the token through a function that runs on every connection attempt, so a reconnect uses the current token. If the token has expired, the connection is refused with `UNAUTHORIZED` and the client renews it (sharing the single refresh request used for API calls) and reconnects.

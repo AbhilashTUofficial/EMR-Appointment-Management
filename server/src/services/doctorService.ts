@@ -3,6 +3,7 @@ import { Department } from "../models/department";
 import { User, type Role, type UserDoc } from "../models/user";
 import { AppError } from "../utils/AppError";
 import type { ScheduleInput } from "../validators/doctor";
+import { publishScheduleChange } from "../realtime";
 import { logAudit } from "./auditService";
 import { createStaff } from "./userService";
 
@@ -53,5 +54,6 @@ export async function updateSchedule(doctorId: string, schedule: ScheduleInput, 
   if (!doctor) throw new AppError(404, "DOCTOR_NOT_FOUND", "Doctor not found");
 
   await logAudit({ userId: adminId, role: "SUPER_ADMIN", action: "SCHEDULE_UPDATED", entityType: "User", entityId: doctor._id });
+  publishScheduleChange(doctor._id);
   return toDoctor(doctor);
 }

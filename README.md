@@ -186,6 +186,7 @@ Open screens update without a refresh. When an appointment is booked, edited, ma
 | `appointment:created` | A slot is booked |
 | `appointment:updated` | Details are edited, the patient arrives, or the visit is completed |
 | `appointment:cancelled` | An appointment is cancelled |
+| `schedule:updated` | A doctor's schedule is saved, which changes the slots on offer (carries only `{ doctorId }`) |
 
 Each event carries only `{ id, doctorId, date, slotStart, status }`. No patient details are sent. The client reacts by refetching what is on screen (the scheduler's slots, the appointment list and the dashboard) through the normal API.
 

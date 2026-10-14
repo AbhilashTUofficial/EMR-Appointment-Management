@@ -9,25 +9,26 @@ import { app } from "../src/app";
 import { Appointment } from "../src/models/appointment";
 import { Patient } from "../src/models/patient";
 import { User } from "../src/models/user";
-import { closeRealtime, initRealtime } from "../src/realtime";
+import { initRealtime } from "../src/realtime";
 import { accessToken, useTestDb } from "./helpers";
 
 useTestDb();
 
 const FUTURE = "2099-03-02";
 let server: Server;
+let realtime: ReturnType<typeof initRealtime>;
 let port: number;
 const open: Socket[] = [];
 
 beforeAll(async () => {
   server = createServer(app);
-  initRealtime(server);
+  realtime = initRealtime(server);
   await new Promise<void>((resolve) => server.listen(0, resolve));
   port = (server.address() as AddressInfo).port;
 });
 
 afterAll(async () => {
-  closeRealtime();
+  realtime.close();
   await new Promise((resolve) => server.close(resolve));
 });
 
@@ -95,6 +96,23 @@ describe("connecting", () => {
       await expect(connect(token)).rejects.toThrow("UNAUTHORIZED");
     }
     await expect(connect(accessToken("RECEPTIONIST"))).resolves.toBeTruthy();
+  });
+});
+
+describe("schedule changes", () => {
+  it("tells staff and the doctor when a schedule is saved, but not other doctors", async () => {
+    const staff = await connect(accessToken("RECEPTIONIST"));
+    const raoSocket = await connect(accessToken("DOCTOR", rao));
+    const mehtaSocket = await connect(accessToken("DOCTOR", mehta));
+    const seen = Promise.all([next(staff, "schedule:updated"), next(raoSocket, "schedule:updated")]);
+    const quiet = staysQuiet(mehtaSocket, "schedule:updated");
+
+    const schedule = { slotDurationMinutes: 15, workingDays: [{ day: 1, sessions: [{ name: "Morning", start: "09:00", end: "12:00" }], breaks: [] }] };
+    const res = await as("SUPER_ADMIN").put(`/api/v1/doctors/${rao}/schedule`).send(schedule);
+
+    expect(res.status).toBe(200);
+    expect(await seen).toEqual([{ doctorId: rao }, { doctorId: rao }]);
+    expect(await quiet).toBe(true);
   });
 });
 
