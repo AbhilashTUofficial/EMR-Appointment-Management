@@ -1,4 +1,4 @@
-import { Schema, model } from "mongoose";
+import { Schema, model, type InferSchemaType } from "mongoose";
 import { HHMM, ISO_DATE } from "../utils/patterns";
 
 export const APPOINTMENT_STATUSES = ["SCHEDULED", "ARRIVED", "COMPLETED", "CANCELLED"] as const;
@@ -38,4 +38,5 @@ appointmentSchema.index({ date: 1, slotStart: 1 }); // date-range list and defau
 appointmentSchema.index({ departmentId: 1, date: 1 });
 appointmentSchema.index({ patientId: 1, date: -1 });
 
+export type AppointmentDoc = InferSchemaType<typeof appointmentSchema>;
 export const Appointment = model("Appointment", appointmentSchema);
