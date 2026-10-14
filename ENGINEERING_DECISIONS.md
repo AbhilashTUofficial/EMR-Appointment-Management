@@ -91,3 +91,17 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 **Cached data is cleared on logout** so the next person on the same browser never sees the previous user's data.
 
 **Forms use React Hook Form with Zod.** Validation runs in the browser for quick feedback, and the server validates again, since the browser can't be trusted.
+
+## Doctors and schedules
+
+**One schedule per doctor, replaced as a whole.** `PUT /doctors/:id/schedule` takes the complete schedule instead of per-day or per-session endpoints. The editor always shows the whole week, so a single request is simpler and keeps the stored schedule consistent: it is either the old one or the new one, never half of each.
+
+**Schedule rules are checked on the server.** The slot generator in the next step relies on well-formed input, so bad schedules are rejected up front: end before start, overlapping sessions or breaks, a repeated day, and slot lengths outside 5-120 minutes. The client shows the server's messages in plain language rather than duplicating the rules.
+
+**A break can sit inside a session or in the gap between two.** The assessment's example (09:00-12:00, lunch 12:00-13:00, 13:00-17:00) is the gap case, but a tea break inside a session works the same way, so breaks are stored per day next to sessions.
+
+**One form for both staff types.** Doctors and receptionists need the same name, email and password, so the client has a single `StaffForm`; doctors add department and specialization. On the server, `createStaff` is shared too, so password hashing, the duplicate-email check and the audit entry exist once.
+
+**Duplicate emails** are detected by the unique index (a 409), not by checking first, so two simultaneous requests can't both succeed.
+
+**Role-gated screens.** The Doctors and Receptionists pages are admin only. The route guard and the nav links hide them from other roles, and the API enforces the same rule on every request.
