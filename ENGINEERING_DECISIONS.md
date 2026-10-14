@@ -84,6 +84,10 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 
 **The route guard is only for convenience.** `RequireAuth` keeps people out of screens they can't use, but every API route checks the token and role again on the server, so hiding a screen is never what protects data.
 
+**One origin, no cookie flags in the client.** The browser talks to the API on its own origin (the Vite proxy in development, a reverse proxy in production), so `fetch` needs no CORS or credentials options for the refresh cookie to be sent.
+
+**Only a rejected refresh ends the session.** If a refresh fails with 401, or a retried request is still rejected, the user is signed out. A network error or server failure leaves them signed in so a brief outage doesn't throw away their session.
+
 **Cached data is cleared on logout** so the next person on the same browser never sees the previous user's data.
 
 **Forms use React Hook Form with Zod.** Validation runs in the browser for quick feedback, and the server validates again, since the browser can't be trusted.

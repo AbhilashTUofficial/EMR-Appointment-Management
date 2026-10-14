@@ -61,7 +61,7 @@ export function refreshSession(): Promise<Session> {
   return refreshing;
 }
 
-// Every API call goes through here so failures always surface as an ApiError.
+// Every API call goes through here so error responses always surface as an ApiError (network failures are rethrown as is).
 export async function http<T>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
   let res = await send(path, init);
 
@@ -69,11 +69,13 @@ export async function http<T>(path: string, init: RequestInit = {}): Promise<Api
   if (res.status === 401 && !path.startsWith("/auth/")) {
     try {
       await refreshSession();
-    } catch {
-      onSessionExpired();
-      throw new ApiError(401, "UNAUTHORIZED", "Your session has expired. Please sign in again.");
+    } catch (err) {
+      // Only a rejected refresh token ends the session; a network blip shouldn't sign anyone out.
+      if (err instanceof ApiError && err.status === 401) onSessionExpired();
+      throw err;
     }
     res = await send(path, init);
+    if (res.status === 401) onSessionExpired();
   }
   return parse<T>(res);
 }

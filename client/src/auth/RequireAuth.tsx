@@ -1,15 +1,13 @@
 import { Navigate, Outlet, useLocation } from "react-router";
-import type { Role } from "../api/http";
 import { Spinner } from "../components/Spinner";
 import { useAuth } from "./AuthContext";
 
-// Route guard. The server checks roles on every request; this only keeps people out of screens they can't use.
-export function RequireAuth({ roles }: { roles?: Role[] }) {
+// Route guard. The server checks the token and role on every request; this only keeps signed-out users off the screens.
+export function RequireAuth() {
   const { user, loading } = useAuth();
   const location = useLocation();
 
-  if (loading) return <Spinner className="min-h-screen" />;
-  if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
-  if (roles && !roles.includes(user.role)) return <Navigate to="/" replace />;
+  if (loading) return <Spinner className="min-h-dvh" />;
+  if (!user) return <Navigate to="/login" state={{ from: location.pathname + location.search + location.hash }} replace />;
   return <Outlet />;
 }

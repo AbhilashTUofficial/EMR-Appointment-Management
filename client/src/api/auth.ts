@@ -6,10 +6,8 @@ export async function login(email: string, password: string) {
   return data.user;
 }
 
+// Signing out always succeeds locally, even if the server can't be reached.
 export async function logout() {
-  try {
-    await http("/auth/logout", { method: "POST" });
-  } finally {
-    setAccessToken(null);
-  }
+  setAccessToken(null);
+  await http("/auth/logout", { method: "POST" }).catch(() => {});
 }
