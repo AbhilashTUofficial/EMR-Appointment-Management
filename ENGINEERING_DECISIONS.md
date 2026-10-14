@@ -73,3 +73,21 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 **Behind a proxy.** The login limiter keys on the client IP, so when the API is deployed behind a reverse proxy, `trust proxy` has to be configured or every user shares the proxy's address.
 
 **Known limit.** A deactivated user's current access token keeps working until it expires (at most 15 minutes), because access tokens are not checked against the database.
+
+## Client authentication
+
+**Session state is one React context.** `AuthProvider` holds the current user. On load it calls `/auth/refresh`, because after a page reload the in-memory access token is gone but the refresh cookie is still there. Until that call finishes, the route guard shows a spinner instead of flashing the login page.
+
+**One shared refresh request.** The refresh token works once, and the server treats a second use as theft. So every caller of `refreshSession()` shares the same in-flight request. This matters in development, where React StrictMode runs effects twice, and whenever several API calls hit an expired token at the same time.
+
+**Expired access tokens are handled in one place.** The `http` wrapper attaches the token, and on a 401 from any non-auth route it refreshes once and retries the request. If the refresh fails, the session is cleared and the user is sent to the login page.
+
+**The route guard is only for convenience.** `RequireAuth` keeps people out of screens they can't use, but every API route checks the token and role again on the server, so hiding a screen is never what protects data.
+
+**One origin, no cookie flags in the client.** The browser talks to the API on its own origin (the Vite proxy in development, a reverse proxy in production), so `fetch` needs no CORS or credentials options for the refresh cookie to be sent.
+
+**Only a rejected refresh ends the session.** If a refresh fails with 401, or a retried request is still rejected, the user is signed out. A network error or server failure leaves them signed in so a brief outage doesn't throw away their session.
+
+**Cached data is cleared on logout** so the next person on the same browser never sees the previous user's data.
+
+**Forms use React Hook Form with Zod.** Validation runs in the browser for quick feedback, and the server validates again, since the browser can't be trusted.

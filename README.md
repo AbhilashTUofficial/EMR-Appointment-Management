@@ -7,7 +7,7 @@ Work in progress: this README grows as each part is built.
 ## Stack
 
 - **Server:** Node.js, Express 5, MongoDB with Mongoose, Zod, JWT
-- **Client:** React, React Router, TanStack Query, Tailwind CSS (Vite)
+- **Client:** React, React Router, TanStack Query, React Hook Form, Zod, Tailwind CSS (Vite)
 
 ## Folder structure
 
@@ -23,12 +23,12 @@ server/
   tests/
 client/
   src/
-    api/           fetch wrapper
-    pages/
+    api/           fetch wrapper (token handling, refresh) and API calls
+    auth/          auth context, route guard
+    components/    shared UI: layout, button, input, spinner
+    pages/         one file per screen
     main.tsx  router.tsx
 ```
-
-
 
 ## Getting started
 
@@ -63,6 +63,8 @@ Every response uses the same envelope:
 All routes live under `/api/v1`.
 
 ## Authentication
+
+The client signs in on `/login`. The session is restored on page reload from the refresh cookie, and signing out ends it on the server. Signed-out users are redirected to `/login`.
 
 Users log in with email and password. Login returns a short-lived access token in the response body (15 minutes). The client keeps it in memory and sends it as `Authorization: Bearer <token>`. A refresh token (7 days) is set as an httpOnly cookie that is only sent to `/api/v1/auth/*`.
 
