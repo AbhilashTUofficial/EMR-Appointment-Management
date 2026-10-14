@@ -105,3 +105,17 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 **Duplicate emails** are detected by the unique index (a 409), not by checking first, so two simultaneous requests can't both succeed.
 
 **Role-gated screens.** The Doctors and Receptionists pages are admin only. The route guard and the nav links hide them from other roles, and the API enforces the same rule on every request.
+
+## Slot generation
+
+**Slots are calculated, not stored.** Each request builds the day's slots from the doctor's schedule. Stored slots would have to be regenerated and cleaned up whenever a schedule changes, and would leave stale rows behind. The only thing stored is the appointment, and its unique index already records which slots are taken.
+
+**How a day is built.** The weekday comes from the date, read as UTC so the server's own timezone can't move it by a day. Each session is cut into slots of the doctor's slot length starting at the session's start time, and a slot is dropped if it touches any break. So a break in the middle of a session removes the slots it covers and the rest stay on the same grid. A break that doesn't line up with the grid removes every slot it touches. Time left over at the end of a session that is shorter than a slot is dropped, which also guarantees slots never overlap and never run past the end of a session.
+
+**Past slots use the clinic's clock.** Dates and times are wall-clock values in one timezone (`CLINIC_TIMEZONE`, default Asia/Kolkata), so "is this slot in the past" compares the slot with the current date and time in that zone, worked out with `Intl.DateTimeFormat` and no date library. A slot counts as past once it has started. The function takes "now" as a parameter so the tests can fix the time.
+
+**The server decides, the screen only shows.** The status of each slot comes from the API. The client has no clock or timezone logic of its own, so it can't disagree with what the booking endpoint will accept.
+
+**One query for bookings.** Bookings for the day come from a single lookup on doctor, date and active appointments, which matches the unique slot index. A booked slot shows as booked even after its time has passed, so the history of the day stays visible.
+
+**Known limit.** If a schedule is edited after appointments exist, those appointments stay in the database and appear in the appointment list, but the scheduler only draws slots the current schedule generates, so an appointment on a slot that no longer exists isn't shown in the grid.
