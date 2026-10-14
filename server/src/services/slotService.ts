@@ -31,6 +31,10 @@ export function generateSchedule(profile: Profile, date: string) {
 }
 
 type Now = ReturnType<typeof clinicNow>;
+
+// A slot counts as past once it has started.
+export const hasPassed = (date: string, start: string, now: Now) => date < now.date || (date === now.date && start <= now.time);
+
 type Booking = { slotStart: string; _id: Types.ObjectId };
 type Slot = { start: string; end: string; status: "AVAILABLE" | "BOOKED" | "PAST"; appointmentId?: Types.ObjectId };
 type DaySlots = {
@@ -49,14 +53,13 @@ export async function getSlots(doctorId: string, date: string, now: Now = clinic
   // Same filter as the unique slot index, so this is an index lookup.
   const booked: Booking[] = await Appointment.find({ doctorId, date, isActive: true }).select("slotStart").lean();
   const bookingFor = (start: string) => booked.find((b) => b.slotStart === start);
-  const hasPassed = (start: string) => date < now.date || (date === now.date && start <= now.time);
 
   const sessions = schedule.sessions.map((session) => ({
     ...session,
     slots: session.slots.map((slot): Slot => {
       const booking = bookingFor(slot.start);
       if (booking) return { ...slot, status: "BOOKED", appointmentId: booking._id };
-      return { ...slot, status: hasPassed(slot.start) ? "PAST" : "AVAILABLE" };
+      return { ...slot, status: hasPassed(date, slot.start, now) ? "PAST" : "AVAILABLE" };
     }),
   }));
 
