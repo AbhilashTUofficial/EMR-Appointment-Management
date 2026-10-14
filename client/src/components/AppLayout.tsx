@@ -3,7 +3,11 @@ import type { Role } from "../api/http";
 import { useAuth } from "../auth/AuthContext";
 import { Button } from "./Button";
 
-const links = [{ to: "/", label: "Dashboard" }];
+const links: { to: string; label: string; roles?: Role[] }[] = [
+  { to: "/", label: "Dashboard" },
+  { to: "/admin/doctors", label: "Doctors", roles: ["SUPER_ADMIN"] },
+  { to: "/admin/receptionists", label: "Receptionists", roles: ["SUPER_ADMIN"] },
+];
 
 const roleLabel: Record<Role, string> = {
   SUPER_ADMIN: "Super Admin",
@@ -21,7 +25,7 @@ export function AppLayout() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
           <span className="font-semibold text-blue-700">EMR Appointments</span>
           <nav aria-label="Main" className="flex flex-1 gap-4 text-sm">
-            {links.map((link) => (
+            {links.filter((link) => !link.roles || link.roles.includes(user.role)).map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}

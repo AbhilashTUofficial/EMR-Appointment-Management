@@ -6,6 +6,7 @@ import { Navigate, useLocation } from "react-router";
 import { ApiError } from "../api/http";
 import { useAuth } from "../auth/AuthContext";
 import { Button } from "../components/Button";
+import { ErrorAlert } from "../components/ErrorAlert";
 import { Input } from "../components/Input";
 import { Spinner } from "../components/Spinner";
 
@@ -49,11 +50,7 @@ export default function Login() {
         </div>
         <Input label="Email" type="email" autoComplete="username" error={errors.email?.message} {...register("email")} />
         <Input label="Password" type="password" autoComplete="current-password" error={errors.password?.message} {...register("password")} />
-        {serverError && (
-          <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-            {serverError}
-          </p>
-        )}
+        <ErrorAlert>{serverError}</ErrorAlert>
         <Button type="submit" disabled={isSubmitting} className="w-full">
           {isSubmitting ? "Signing in…" : "Sign in"}
         </Button>

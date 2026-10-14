@@ -25,8 +25,10 @@ client/
   src/
     api/           fetch wrapper (token handling, refresh) and API calls
     auth/          auth context, route guard
-    components/    shared UI: layout, button, input, spinner
-    pages/         one file per screen
+    components/    shared UI: layout, form fields, button, spinner, staff form
+    hooks/         shared data queries
+    forms.ts       shows server validation errors on form fields
+    pages/         one file per screen (admin screens in pages/admin)
     main.tsx  router.tsx
 ```
 
@@ -77,6 +79,20 @@ Users log in with email and password. Login returns a short-lived access token i
 Errors: `400` invalid body, `401` wrong credentials or missing/invalid token, `403` role not allowed, `429` too many login attempts.
 
 Roles are `SUPER_ADMIN`, `RECEPTIONIST` and `DOCTOR`. Routes are protected with the `authenticate` and `authorize(...roles)` middlewares.
+
+## Doctors, schedules and receptionists
+
+| Method | Path | Who | Notes |
+|---|---|---|---|
+| GET | `/departments` | any signed-in user | Name and code of each department |
+| GET | `/doctors` | admin, receptionist, doctor | Optional `?departmentId=`. A doctor only gets themselves |
+| POST | `/doctors` | admin | `{ name, email, password, departmentId, specialization? }`. Creates a doctor with no working days yet |
+| PUT | `/doctors/:id/schedule` | admin | `{ slotDurationMinutes, workingDays[] }`, replaces the whole schedule |
+| POST | `/receptionists` | admin | `{ name, email, password }` |
+
+A schedule is a list of working days (`day` 0 = Sunday to 6 = Saturday). Each day has named `sessions` and `breaks` as `HH:mm` ranges. The server rejects an end before a start, overlapping sessions, overlapping breaks, a day listed twice and slot lengths outside 5-120 minutes.
+
+Admins manage this in the app under Doctors and Receptionists.
 
 Other: `GET /api/v1/health`.
 

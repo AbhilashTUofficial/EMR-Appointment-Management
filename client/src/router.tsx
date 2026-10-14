@@ -4,6 +4,9 @@ import { AppLayout } from "./components/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import ErrorPage from "./pages/ErrorPage";
 import Login from "./pages/Login";
+import DoctorSchedule from "./pages/admin/DoctorSchedule";
+import Doctors from "./pages/admin/Doctors";
+import Receptionists from "./pages/admin/Receptionists";
 
 export const router = createBrowserRouter([
   { path: "/login", element: <Login />, errorElement: <ErrorPage /> },
@@ -13,7 +16,17 @@ export const router = createBrowserRouter([
     children: [
       {
         element: <AppLayout />,
-        children: [{ path: "/", element: <Dashboard /> }],
+        children: [
+          { path: "/", element: <Dashboard /> },
+          {
+            element: <RequireAuth roles={["SUPER_ADMIN"]} />,
+            children: [
+              { path: "/admin/doctors", element: <Doctors /> },
+              { path: "/admin/doctors/:id/schedule", element: <DoctorSchedule /> },
+              { path: "/admin/receptionists", element: <Receptionists /> },
+            ],
+          },
+        ],
       },
     ],
   },

@@ -1,10 +1,10 @@
 import type { RequestHandler } from "express";
 import type { ZodType } from "zod";
 
-// Replaces the body with the parsed value, so unknown fields are dropped and types are coerced.
+// Replaces the request data with the parsed value, so unknown fields are dropped and types are coerced.
 export const validate =
-  (schema: ZodType): RequestHandler =>
+  (schema: ZodType, source: "body" | "params" = "body"): RequestHandler =>
   (req, _res, next) => {
-    req.body = schema.parse(req.body);
+    req[source] = schema.parse(req[source]);
     next();
   };

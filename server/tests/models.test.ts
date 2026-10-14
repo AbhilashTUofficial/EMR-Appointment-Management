@@ -1,25 +1,13 @@
-import mongoose, { Types } from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { Types } from "mongoose";
+import { describe, expect, it } from "vitest";
 import { Appointment } from "../src/models/appointment";
 import { Department } from "../src/models/department";
 import { Patient } from "../src/models/patient";
 import { RefreshToken } from "../src/models/refreshToken";
 import { User } from "../src/models/user";
+import { useTestDb } from "./helpers";
 
-let mongod: MongoMemoryServer;
-
-beforeAll(async () => {
-  mongod = await MongoMemoryServer.create();
-  await mongoose.connect(mongod.getUri());
-  // Indexes are built in the background; wait so the tests below can rely on them.
-  await Promise.all(Object.values(mongoose.models).map((m) => m.init()));
-});
-
-afterAll(async () => {
-  await mongoose.disconnect();
-  await mongod.stop();
-});
+useTestDb();
 
 const slot = (overrides = {}) => ({
   patientId: new Types.ObjectId(),
