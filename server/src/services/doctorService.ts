@@ -48,7 +48,7 @@ export async function updateSchedule(doctorId: string, schedule: ScheduleInput, 
   const doctor = await User.findOneAndUpdate(
     { _id: doctorId, role: "DOCTOR" },
     { $set: { "doctorProfile.slotDurationMinutes": schedule.slotDurationMinutes, "doctorProfile.workingDays": schedule.workingDays } },
-    { new: true, runValidators: true },
+    { returnDocument: "after", runValidators: true },
   ).lean();
   if (!doctor) throw new AppError(404, "DOCTOR_NOT_FOUND", "Doctor not found");
 
