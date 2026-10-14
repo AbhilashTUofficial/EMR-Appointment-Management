@@ -2,6 +2,7 @@ import { Schema, model } from "mongoose";
 import { HHMM } from "../utils/patterns";
 
 export const ROLES = ["SUPER_ADMIN", "RECEPTIONIST", "DOCTOR"] as const;
+export type Role = (typeof ROLES)[number];
 
 const hhmm = { type: String, required: true, match: HHMM };
 
