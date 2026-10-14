@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { getSummary, listAppointments } from "../api/appointments";
 import { getDepartments } from "../api/departments";
 import { getDoctors } from "../api/doctors";
 import { searchPatients } from "../api/patients";
@@ -19,3 +20,10 @@ export const useSlots = (doctorId: string | undefined, date: string) =>
 
 export const usePatientSearch = (term: string) =>
   useQuery({ queryKey: ["patients", term], queryFn: () => searchPatients(term), enabled: term.length > 0 });
+
+// `query` is the URL query string, so the page's filters, sorting and page number are the cache key.
+// Keeping the previous page on screen while the next one loads avoids a flash of empty content.
+export const useAppointments = (query: string, enabled = true) =>
+  useQuery({ queryKey: ["appointments", query], queryFn: () => listAppointments(query), placeholderData: keepPreviousData, enabled });
+
+export const useSummary = () => useQuery({ queryKey: ["dashboard"], queryFn: getSummary });

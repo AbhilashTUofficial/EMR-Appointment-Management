@@ -7,9 +7,8 @@ import { Select } from "../components/Select";
 import { SlotGrid, SlotLegend } from "../components/SlotGrid";
 import { Spinner } from "../components/Spinner";
 import { useAuth } from "../auth/AuthContext";
+import { today } from "../format";
 import { useDepartments, useDoctors, useSlots } from "../hooks/queries";
-
-const today = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD in the browser's timezone
 
 export default function Scheduler() {
   const { user } = useAuth();

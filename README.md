@@ -25,7 +25,7 @@ client/
   src/
     api/           fetch wrapper (token handling, refresh) and API calls
     auth/          auth context, route guard
-    components/    shared UI: layout, form fields, button, spinner, staff form, slot grid, patient picker
+    components/    shared UI: layout, form fields, button, modal, pagination, status badge, slot grid, patient picker, appointment row
     hooks/         shared data queries
     forms.ts       shows server validation errors on form fields
     pages/         one file per screen (admin screens in pages/admin)
@@ -138,6 +138,43 @@ For a patient who is already registered, send `"patientId": "…"` instead of `n
 Errors: `400` for invalid input, a time that isn't one of the doctor's slots (`SLOT_NOT_AVAILABLE`, which covers breaks and times off the slot grid) or a slot in the past (`SLOT_IN_PAST`); `404` for an unknown doctor or patient; `409` `SLOT_ALREADY_BOOKED` when someone else got the slot first.
 
 In the app, clicking an available slot in the scheduler opens the booking page, where the receptionist either searches for an existing patient or enters a new one.
+
+## Managing appointments
+
+| Method | Path | Who | Notes |
+|---|---|---|---|
+| GET | `/appointments` | admin, receptionist, doctor | Search, filter, sort and page (see below). A doctor only gets their own |
+| GET | `/appointments/:id` | admin, receptionist, doctor | One appointment with patient and doctor |
+| PUT | `/appointments/:id` | admin, receptionist, doctor | Receptionist/admin: `purpose`, `notes`. Doctor: `consultationNotes` only |
+| DELETE | `/appointments/:id` | admin, receptionist | Cancels (the record is kept, the slot is freed) |
+| POST | `/appointments/:id/arrive` | admin, receptionist | Only on the day of the appointment |
+| POST | `/appointments/:id/complete` | the appointment's doctor | After the patient has arrived |
+| GET | `/dashboard/summary` | any signed-in user | Today's appointments by status (a doctor's own); the admin also gets doctor and patient totals |
+
+**Status workflow**
+
+```
+SCHEDULED ──arrive──▶ ARRIVED ──complete──▶ COMPLETED
+    └──cancel──▶ CANCELLED
+```
+
+Anything else is rejected with `409 INVALID_STATUS_TRANSITION`. A cancelled or completed appointment can't be edited by the front desk, and a doctor can add consultation notes only once the patient has arrived. Consultation notes are not sent to receptionists.
+
+**List query parameters** for `GET /appointments`
+
+| Parameter | Meaning |
+|---|---|
+| `page`, `limit` | Page number (default 1) and page size (default 20, at most 50) |
+| `sortBy`, `order` | `date` (default), `createdAt` or `status`; `asc` or `desc` (default) |
+| `patient` | Patient name (start of it) or patient ID |
+| `mobile` | Start of the patient's mobile number |
+| `doctor` | Part of the doctor's name |
+| `doctorId`, `departmentId`, `status` | Exact filters |
+| `from`, `to` | Date range, inclusive (`YYYY-MM-DD`) |
+
+The response is `{ data: [...], meta: { page, limit, total, totalPages } }`. Unknown sort fields, a limit over 50 and malformed dates are rejected with `400`.
+
+In the app, Appointments lists these with the same filters (kept in the URL), sortable columns and paging, plus the actions each role is allowed. The dashboard shows today's counts and appointments.
 
 Other: `GET /api/v1/health`.
 

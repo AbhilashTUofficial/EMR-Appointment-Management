@@ -13,6 +13,7 @@ import { PatientPicker } from "../components/PatientPicker";
 import { Select } from "../components/Select";
 import { Textarea } from "../components/Textarea";
 import { applyServerError } from "../forms";
+import { formatDate } from "../format";
 import { useDoctors } from "../hooks/queries";
 
 type Mode = "existing" | "new";
@@ -40,9 +41,6 @@ const schemaFor = (mode: Mode) =>
     if (!/^\+?\d{10,15}$/.test((values.mobile ?? "").replace(/[\s-]/g, ""))) reject("mobile", "Enter a valid mobile number");
     if (!values.gender) reject("gender", "Choose a gender");
   });
-
-const formatDate = (date: string) =>
-  new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 
 export default function Book() {
   const [params] = useSearchParams();

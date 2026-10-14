@@ -144,3 +144,45 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 
 **The search term is treated literally.** It is escaped before being used in a pattern, so characters like `.*` can't turn a search into a broad regular expression.
 
+## Appointment status workflow
+
+**One table of allowed moves.** `utils/appointmentStatus.ts` lists, for each status, the statuses it may move to: scheduled to arrived or cancelled, arrived to completed, and nothing after completed or cancelled. Every status change goes through it, so an impossible move (cancelling a patient who has already arrived, completing a visit that never started) is refused in one place instead of being checked in several.
+
+**Changes are conditional on the status that was read.** The update only applies if the appointment is still in the status the service just looked at. If a receptionist marks a patient arrived while another cancels the same appointment, exactly one succeeds and the other gets a 409 telling them to refresh. A test runs both at once.
+
+**Cancelling keeps the record.** The appointment stays in the database with a cancellation time and who cancelled it, and drops out of the slot index, so the slot can be booked again. Nothing is deleted, which keeps the audit trail meaningful.
+
+**"Arrived" only on the day.** Marking tomorrow's patient as arrived is almost certainly a mistake, so the server refuses it.
+
+**Roles decide which fields can change.** Front desk staff edit the purpose and booking notes. Only doctors write consultation notes, and only for their own patients once the patient has arrived. A request that touches a field the caller's role can't change is a `403`, not silently ignored. Consultation notes are clinical, so they are left out of what receptionists receive.
+
+**Another doctor's appointment doesn't exist.** A doctor asking for an appointment that belongs to someone else gets a `404`, the same as for an id that doesn't exist, so the response doesn't confirm that it exists.
+
+## Searching, filtering and paging appointments
+
+**Everything is decided on the server.** The page of results, the total, the sorting and every filter come from the API, and the screen only shows them.
+
+**One query for the list.** The list is a single query plus a count, run together. The patient and doctor for the page are then fetched with one lookup each, however many rows there are, so a page costs a fixed four queries and never one per row.
+
+**Searching by patient, mobile or doctor name** first finds the matching patient or doctor ids, but only when that filter is used, then filters appointments by those ids. A plain list does no extra lookups. The patient lookup is capped at 1,000 ids, which is far more than a page of results can use.
+
+**Sorting can't be steered by the caller.** The sort field comes from a fixed list (`date`, `createdAt`, `status`); anything else is rejected. The record id is always the last sort key, so pages don't repeat or skip rows when many appointments share a date.
+
+**Page size is capped at 50, and the page number at 10,000,** so one request can't ask for the whole table or make the database skip an absurd number of rows.
+
+**What the indexes cover.** The default list (all appointments, newest first) matches the `{date, slotStart, _id}` index exactly, so it needs no in-memory sorting. Lists narrowed by doctor, department, status or patient use the index for that filter and then sort the (much smaller) filtered set in memory, and sorting by status or creation time has no index at all. That is fine for one clinic's data. At millions of appointments the next step would be indexes that pair each common filter with the sort, or a search service, as described in the scaling notes.
+
+**Counting.** The total is an exact count when filters are applied. With no filters it uses the collection's own estimate, which is instant instead of a scan.
+
+**Dates are compared as strings.** Appointment dates are stored as `YYYY-MM-DD`, which sort and compare correctly, so the date range filter uses the date index directly.
+
+**Doctors can't widen their view.** For a doctor the doctor filter is forced to themselves; a different `doctorId` in the request is ignored.
+
+## The dashboard
+
+The summary is one aggregation over today's appointments (by clinic date, for a doctor only their own), so its cost depends on one day's appointments, not the whole history. The admin also sees how many doctors and patients exist. The client then asks the normal list endpoint for the first ten of today's appointments, so the dashboard reuses the list's permissions and shape instead of having its own.
+
+## Keeping the screen in step
+
+After arrive, cancel or complete, the client refetches the appointment lists, the scheduler's slots and the dashboard counts, so every screen shows the same thing. Live updates for other users' changes are added in the real-time step.
+

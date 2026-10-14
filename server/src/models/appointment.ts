@@ -1,7 +1,8 @@
-import { Schema, model } from "mongoose";
+import { Schema, model, type InferSchemaType } from "mongoose";
 import { HHMM, ISO_DATE } from "../utils/patterns";
 
 export const APPOINTMENT_STATUSES = ["SCHEDULED", "ARRIVED", "COMPLETED", "CANCELLED"] as const;
+export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number];
 
 const ref = (name: string) => ({ type: Schema.Types.ObjectId, ref: name, required: true });
 
@@ -34,8 +35,9 @@ appointmentSchema.index(
   { unique: true, partialFilterExpression: { isActive: true } },
 );
 appointmentSchema.index({ doctorId: 1, date: 1, status: 1 }); // doctor's own list, status filters
-appointmentSchema.index({ date: 1, slotStart: 1 }); // date-range list and default sort
+appointmentSchema.index({ date: 1, slotStart: 1, _id: 1 }); // date-range list; matches the default sort, so it needs no in-memory sorting
 appointmentSchema.index({ departmentId: 1, date: 1 });
 appointmentSchema.index({ patientId: 1, date: -1 });
 
+export type AppointmentDoc = InferSchemaType<typeof appointmentSchema>;
 export const Appointment = model("Appointment", appointmentSchema);

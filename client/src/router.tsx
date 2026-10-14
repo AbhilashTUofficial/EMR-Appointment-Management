@@ -1,6 +1,7 @@
 import { Navigate, createBrowserRouter } from "react-router";
 import { RequireAuth } from "./auth/RequireAuth";
 import { AppLayout } from "./components/AppLayout";
+import Appointments from "./pages/Appointments";
 import Book from "./pages/Book";
 import Dashboard from "./pages/Dashboard";
 import ErrorPage from "./pages/ErrorPage";
@@ -21,6 +22,7 @@ export const router = createBrowserRouter([
         children: [
           { path: "/", element: <Dashboard /> },
           { path: "/scheduler", element: <Scheduler /> },
+          { path: "/appointments", element: <Appointments /> },
           {
             element: <RequireAuth roles={["SUPER_ADMIN", "RECEPTIONIST"]} />,
             children: [{ path: "/book", element: <Book /> }],
