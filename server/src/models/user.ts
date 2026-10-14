@@ -1,4 +1,4 @@
-import { Schema, model } from "mongoose";
+import { Schema, model, type InferSchemaType } from "mongoose";
 import { HHMM } from "../utils/patterns";
 
 export const ROLES = ["SUPER_ADMIN", "RECEPTIONIST", "DOCTOR"] as const;
@@ -49,4 +49,5 @@ const userSchema = new Schema(
 
 userSchema.index({ role: 1, "doctorProfile.departmentId": 1 });
 
+export type UserDoc = InferSchemaType<typeof userSchema>;
 export const User = model("User", userSchema);
