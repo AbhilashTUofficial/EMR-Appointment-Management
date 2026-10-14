@@ -1,10 +1,8 @@
 import bcrypt from "bcrypt";
 import express from "express";
 import jwt from "jsonwebtoken";
-import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
 import request from "supertest";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/app";
 import { authenticate } from "../src/middlewares/authenticate";
 import { authorize } from "../src/middlewares/authorize";
@@ -12,20 +10,11 @@ import { errorHandler } from "../src/middlewares/errorHandler";
 import { AuditLog } from "../src/models/auditLog";
 import { RefreshToken } from "../src/models/refreshToken";
 import { User } from "../src/models/user";
+import { accessToken, useTestDb } from "./helpers";
 
 const PASSWORD = "Passw0rd!123";
-let mongod: MongoMemoryServer;
 
-beforeAll(async () => {
-  mongod = await MongoMemoryServer.create();
-  await mongoose.connect(mongod.getUri());
-  await Promise.all(Object.values(mongoose.models).map((m) => m.init()));
-});
-
-afterAll(async () => {
-  await mongoose.disconnect();
-  await mongod.stop();
-});
+useTestDb();
 
 beforeEach(async () => {
   await Promise.all([User.deleteMany({}), RefreshToken.deleteMany({}), AuditLog.deleteMany({})]);
@@ -152,9 +141,6 @@ describe("authenticate and authorize", () => {
       res.json({ id: req.user!.id, role: req.user!.role });
     })
     .use(errorHandler);
-
-  const accessToken = (role: string) =>
-    jwt.sign({ role }, "test-access-secret-test-access-secret", { subject: "user-id", expiresIn: 60 });
 
   it("rejects requests without a valid access token", async () => {
     expect((await request(guarded).get("/admin-only")).status).toBe(401);
