@@ -13,7 +13,7 @@ export type Doctor = Schedule & {
 export type NewDoctor = { name: string; email: string; password: string; departmentId: string; specialization?: string };
 
 export const getDoctors = async (departmentId?: string) =>
-  (await http<Doctor[]>(`/doctors${departmentId ? `?departmentId=${departmentId}` : ""}`)).data;
+  (await http<Doctor[]>(`/doctors${departmentId ? `?${new URLSearchParams({ departmentId })}` : ""}`)).data;
 
 export const createDoctor = async (doctor: NewDoctor) =>
   (await http<Doctor>("/doctors", { method: "POST", body: JSON.stringify(doctor) })).data;

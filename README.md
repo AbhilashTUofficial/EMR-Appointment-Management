@@ -25,7 +25,7 @@ client/
   src/
     api/           fetch wrapper (token handling, refresh) and API calls
     auth/          auth context, route guard
-    components/    shared UI: layout, form fields, button, spinner, staff form
+    components/    shared UI: layout, form fields, button, spinner, staff form, slot grid
     hooks/         shared data queries
     forms.ts       shows server validation errors on form fields
     pages/         one file per screen (admin screens in pages/admin)
@@ -94,6 +94,28 @@ A schedule is a list of working days (`day` 0 = Sunday to 6 = Saturday). Each da
 
 Admins manage this in the app under Doctors and Receptionists.
 
+## Slots
+
+`GET /slots?doctorId=&date=YYYY-MM-DD` (admin, receptionist, doctor for their own schedule). Both parameters are required.
+
+Slots are worked out from the doctor's schedule each time and are not stored. The response is the day's sessions with their slots, plus the breaks:
+
+```json
+{
+  "isWorkingDay": true,
+  "sessions": [
+    { "name": "Morning", "start": "09:00", "end": "12:00",
+      "slots": [{ "start": "09:00", "end": "09:15", "status": "AVAILABLE" },
+                { "start": "09:15", "end": "09:30", "status": "BOOKED", "appointmentId": "…" }] }
+  ],
+  "breaks": [{ "name": "Lunch Break", "start": "12:00", "end": "13:00" }]
+}
+```
+
+A slot is `BOOKED` if an active appointment holds it, `PAST` if it has already started (or the date is before today), otherwise `AVAILABLE`. On a day the doctor doesn't work, `isWorkingDay` is false and the lists are empty. Errors: `400` bad or missing parameters, `404` unknown doctor (or another doctor's schedule when signed in as a doctor).
+
+The scheduler screen shows this as a grid, with the filters (department, doctor, date) kept in the URL.
+
 Other: `GET /api/v1/health`.
 
 ## Environment variables
@@ -106,6 +128,7 @@ See `server/.env.example`.
 | `CLIENT_ORIGIN` | Allowed CORS origin (default http://localhost:5173) |
 | `MONGODB_URI` | MongoDB connection string |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Token signing secrets, at least 32 characters each and different from each other |
+| `CLINIC_TIMEZONE` | Timezone appointment dates and times are in (default Asia/Kolkata) |
 | `SEED_PASSWORD` | Password for the accounts created by the seed script |
 
 ## Database
