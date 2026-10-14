@@ -10,3 +10,5 @@ export class AppError extends Error {
     super(message);
   }
 }
+
+export const unauthorized = () => new AppError(401, "UNAUTHORIZED", "Authentication required");

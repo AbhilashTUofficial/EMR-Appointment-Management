@@ -93,6 +93,9 @@ describe("POST /auth/refresh", () => {
     expect(second.body.data.accessToken).toBeTruthy();
     expect(refreshCookie(second)).not.toBe(refreshCookie(first));
     expect(await RefreshToken.countDocuments()).toBe(1);
+
+    const oldToken = refreshCookie(first);
+    expect((await request(app).post("/api/v1/auth/refresh").set("Cookie", oldToken)).status).toBe(401);
   });
 
   it("treats a reused refresh token as theft and ends every session", async () => {
@@ -105,6 +108,13 @@ describe("POST /auth/refresh", () => {
 
     const afterReplay = await request(app).post("/api/v1/auth/refresh").set("Cookie", refreshCookie(second));
     expect(afterReplay.status).toBe(401);
+  });
+
+  it("rejects a refresh for a user who has been deactivated", async () => {
+    const loggedIn = await login();
+    await User.updateOne({ email: "admin@emr.test" }, { isActive: false });
+    const res = await request(app).post("/api/v1/auth/refresh").set("Cookie", refreshCookie(loggedIn));
+    expect(res.status).toBe(401);
   });
 
   it("rejects a missing or forged token", async () => {
@@ -124,14 +134,15 @@ describe("POST /auth/logout", () => {
     expect(out.status).toBe(200);
     expect(refreshCookie(out)).toMatch(/refreshToken=;/);
     expect(await RefreshToken.countDocuments()).toBe(0);
+    expect((await request(app).post("/api/v1/auth/refresh").set("Cookie", cookie)).status).toBe(401);
     expect((await AuditLog.findOne({ action: "LOGOUT" }))?.role).toBe("SUPER_ADMIN");
 
-    const reuse = await request(app).post("/api/v1/auth/refresh").set("Cookie", cookie);
-    expect(reuse.status).toBe(401);
   });
 
-  it("succeeds even when nobody is logged in", async () => {
+  it("succeeds even when nobody is logged in or the cookie is malformed", async () => {
     expect((await request(app).post("/api/v1/auth/logout")).status).toBe(200);
+    const crafted = await request(app).post("/api/v1/auth/logout").set("Cookie", 'refreshToken=j:{"a":1}');
+    expect(crafted.status).toBe(200);
   });
 });
 
@@ -142,7 +153,8 @@ describe("authenticate and authorize", () => {
     })
     .use(errorHandler);
 
-  const token = async (email: string) => (await login(email)).body.data.accessToken as string;
+  const accessToken = (role: string) =>
+    jwt.sign({ role }, "test-access-secret-test-access-secret", { subject: "user-id", expiresIn: 60 });
 
   it("rejects requests without a valid access token", async () => {
     expect((await request(guarded).get("/admin-only")).status).toBe(401);
@@ -152,14 +164,19 @@ describe("authenticate and authorize", () => {
     expect((await request(guarded).get("/admin-only").set("Authorization", `Bearer ${refreshTokenUsedAsAccess}`)).status).toBe(401);
   });
 
+  it("rejects a token with an unknown role", async () => {
+    const res = await request(guarded).get("/admin-only").set("Authorization", `Bearer ${accessToken("GOD")}`);
+    expect(res.status).toBe(401);
+  });
+
   it("allows the right role and blocks the wrong one", async () => {
-    const admin = await request(guarded).get("/admin-only").set("Authorization", `Bearer ${await token("admin@emr.test")}`);
+    const admin = await request(guarded).get("/admin-only").set("Authorization", `Bearer ${accessToken("SUPER_ADMIN")}`);
     expect(admin.status).toBe(200);
     expect(admin.body.role).toBe("SUPER_ADMIN");
 
     const receptionist = await request(guarded)
       .get("/admin-only")
-      .set("Authorization", `Bearer ${await token("reception@emr.test")}`);
+      .set("Authorization", `Bearer ${accessToken("RECEPTIONIST")}`);
     expect(receptionist.status).toBe(403);
     expect(receptionist.body.code).toBe("FORBIDDEN");
   });

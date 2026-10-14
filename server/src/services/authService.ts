@@ -3,21 +3,22 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import type { Types } from "mongoose";
 import { env } from "../config/env";
+import { BCRYPT_ROUNDS } from "../config/security";
 import { RefreshToken } from "../models/refreshToken";
-import { User } from "../models/user";
-import { AppError } from "../utils/AppError";
+import { User, type Role } from "../models/user";
+import { AppError, unauthorized } from "../utils/AppError";
+import { verifyToken } from "../utils/jwt";
 import { logAudit } from "./auditService";
 
 const ACCESS_TTL_SECONDS = 15 * 60;
 export const REFRESH_TTL_SECONDS = 7 * 24 * 60 * 60;
 
-const unauthorized = () => new AppError(401, "UNAUTHORIZED", "Authentication required");
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 // Compared against when the email is unknown, so response time doesn't reveal which emails exist.
-const DUMMY_HASH = bcrypt.hashSync("not-a-real-password", 12);
+const DUMMY_HASH = bcrypt.hashSync("not-a-real-password", BCRYPT_ROUNDS);
 
-type UserForToken = { _id: Types.ObjectId; name: string; email: string; role: string };
+type UserForToken = { _id: Types.ObjectId; name: string; email: string; role: Role };
 
 const publicUser = (user: UserForToken) => ({ id: user._id, name: user.name, email: user.email, role: user.role });
 
@@ -46,21 +47,16 @@ export async function login(email: string, password: string) {
     throw new AppError(401, "INVALID_CREDENTIALS", "Invalid email or password");
   }
 
+  const tokens = await issueTokens(user);
   await logAudit({ userId: user._id, role: user.role, action: "LOGIN", entityType: "User", entityId: user._id });
-  return { user: publicUser(user), ...(await issueTokens(user)) };
+  return { user: publicUser(user), ...tokens };
 }
 
 // Each refresh token works once: it is deleted when used and a new one is issued.
 export async function refresh(token?: string) {
   if (!token) throw unauthorized();
 
-  let payload;
-  try {
-    payload = jwt.verify(token, env.JWT_REFRESH_SECRET, { algorithms: ["HS256"] });
-  } catch {
-    throw unauthorized();
-  }
-  if (typeof payload === "string") throw unauthorized();
+  const payload = verifyToken(token, env.JWT_REFRESH_SECRET);
 
   // Atomic, so two simultaneous refreshes with the same token can't both succeed.
   const stored = await RefreshToken.findOneAndDelete({ tokenHash: sha256(token) });

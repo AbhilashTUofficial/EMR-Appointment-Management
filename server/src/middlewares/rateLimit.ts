@@ -7,6 +7,7 @@ export const loginLimiter = rateLimit({
   limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  skipSuccessfulRequests: true, // only failed attempts count, so a shared office IP isn't locked out by normal use
   skip: () => env.NODE_ENV === "test",
   handler: (_req, res) => sendError(res, 429, "TOO_MANY_REQUESTS", "Too many login attempts. Try again later."),
 });
