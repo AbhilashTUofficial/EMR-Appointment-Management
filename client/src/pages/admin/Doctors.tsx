@@ -15,7 +15,7 @@ export default function Doctors() {
   const departments = useDepartments();
   const [adding, setAdding] = useState(false);
 
-  const departmentName = (id: string) => departments.data?.find((d) => d._id === id)?.name;
+  const departmentName = (id: string) => departments.data?.find((d) => d.id === id)?.name;
 
   return (
     <div className="space-y-6">
@@ -32,7 +32,7 @@ export default function Doctors() {
             submitLabel="Create doctor"
             onCancel={() => setAdding(false)}
             onSubmit={async (values) => {
-              await createDoctor(values);
+              await createDoctor({ ...values, departmentId: values.departmentId! });
               await queryClient.invalidateQueries({ queryKey: ["doctors"] });
               setAdding(false);
             }}

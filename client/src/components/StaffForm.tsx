@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useForm, type Resolver } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useDepartments } from "../hooks/queries";
@@ -14,12 +14,10 @@ const receptionistSchema = z.object({
   email: z.email("Enter a valid email address"),
   password: z.string().min(8, "Use at least 8 characters"),
 });
-const doctorSchema = receptionistSchema.extend({
-  departmentId: z.string().min(1, "Choose a department"),
-  specialization: z.string().optional(),
-});
+// The department is only required for doctors, so it is checked on submit rather than in the schema.
+const schema = receptionistSchema.extend({ departmentId: z.string().optional(), specialization: z.string().optional() });
 
-export type StaffValues = z.infer<typeof doctorSchema>;
+type StaffValues = z.infer<typeof schema>;
 
 type Props = {
   withDoctorFields?: boolean;
@@ -31,8 +29,6 @@ type Props = {
 // One form for both account types; doctors also get a department and specialization.
 export function StaffForm({ withDoctorFields, submitLabel, onSubmit, onCancel }: Props) {
   const departments = useDepartments();
-  // Receptionists skip the doctor-only fields, so their schema is a subset of StaffValues.
-  const resolver = (withDoctorFields ? zodResolver(doctorSchema) : zodResolver(receptionistSchema)) as Resolver<StaffValues>;
   const [serverError, setServerError] = useState("");
   const {
     register,
@@ -40,10 +36,11 @@ export function StaffForm({ withDoctorFields, submitLabel, onSubmit, onCancel }:
     reset,
     setError,
     formState: { errors, isSubmitting },
-  } = useForm<StaffValues>({ resolver });
+  } = useForm<StaffValues>({ resolver: zodResolver(schema) });
 
   const submit = handleSubmit(async (values) => {
     setServerError("");
+    if (withDoctorFields && !values.departmentId) return setError("departmentId", { message: "Choose a department" });
     try {
       await onSubmit(values);
       reset();
@@ -62,7 +59,7 @@ export function StaffForm({ withDoctorFields, submitLabel, onSubmit, onCancel }:
           <Select label="Department" error={errors.departmentId?.message} {...register("departmentId")}>
             <option value="">Choose…</option>
             {departments.data?.map((d) => (
-              <option key={d._id} value={d._id}>
+              <option key={d.id} value={d.id}>
                 {d.name}
               </option>
             ))}

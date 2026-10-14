@@ -3,7 +3,7 @@ import { createReceptionistHandler } from "../controllers/receptionistController
 import { authenticate } from "../middlewares/authenticate";
 import { authorize } from "../middlewares/authorize";
 import { validate } from "../middlewares/validate";
-import { createStaffSchema } from "../validators/doctor";
+import { createStaffSchema } from "../validators/staff";
 
 export const receptionistRoutes = Router();
 

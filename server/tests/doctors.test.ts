@@ -76,6 +76,9 @@ describe("POST /doctors", () => {
       .send(newDoctor({ email: "x@emr.test", departmentId: "64b000000000000000000000" }));
     expect(unknownDepartment.status).toBe(404);
 
+    const tooLong = await admin.post("/api/v1/doctors").send(newDoctor({ email: "long@emr.test", password: "é".repeat(40) }));
+    expect(tooLong.status).toBe(400); // 80 bytes: bcrypt would silently cut it at 72
+
     const invalid = await admin.post("/api/v1/doctors").send(newDoctor({ password: "short", departmentId: "nope" }));
     expect(invalid.status).toBe(400);
     expect(invalid.body.errors.map((e: { field: string }) => e.field).sort()).toEqual(["departmentId", "password"]);
@@ -120,6 +123,7 @@ describe("PUT /doctors/:id/schedule", () => {
     ["a day outside 0-6", { ...validSchedule, workingDays: [day([range("09:00", "12:00")], [], 7)] }],
     ["a slot length under 5 minutes", { ...validSchedule, slotDurationMinutes: 3 }],
     ["a fractional slot length", { ...validSchedule, slotDurationMinutes: 7.5 }],
+    ["a session shorter than one slot", { slotDurationMinutes: 30, workingDays: [day([range("09:00", "09:20")])] }],
   ])("rejects %s", async (_name, body) => {
     const id = await createDoctor();
     const res = await admin.put(`/api/v1/doctors/${id}/schedule`).send(body);

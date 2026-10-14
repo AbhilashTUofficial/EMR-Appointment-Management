@@ -96,7 +96,7 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 
 **One schedule per doctor, replaced as a whole.** `PUT /doctors/:id/schedule` takes the complete schedule instead of per-day or per-session endpoints. The editor always shows the whole week, so a single request is simpler and keeps the stored schedule consistent: it is either the old one or the new one, never half of each.
 
-**Schedule rules are checked on the server.** The slot generator in the next step relies on well-formed input, so bad schedules are rejected up front: end before start, overlapping sessions or breaks, a repeated day, and slot lengths outside 5-120 minutes. The client shows the server's messages in plain language rather than duplicating the rules.
+**Schedule rules are checked on the server.** The slot generator in the next step relies on well-formed input, so bad schedules are rejected up front: end before start, overlapping sessions or breaks, a repeated day, and slot lengths outside 5-120 minutes. The client doesn't repeat these rules; it shows the server's messages in plain language, and only offers slot lengths from a fixed list.
 
 **A break can sit inside a session or in the gap between two.** The assessment's example (09:00-12:00, lunch 12:00-13:00, 13:00-17:00) is the gap case, but a tea break inside a session works the same way, so breaks are stored per day next to sessions.
 

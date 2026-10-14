@@ -25,8 +25,9 @@ client/
   src/
     api/           fetch wrapper (token handling, refresh) and API calls
     auth/          auth context, route guard
-    components/    shared UI: layout, button, input, spinner
+    components/    shared UI: layout, form fields, button, spinner, staff form
     hooks/         shared data queries
+    forms.ts       shows server validation errors on form fields
     pages/         one file per screen (admin screens in pages/admin)
     main.tsx  router.tsx
 ```

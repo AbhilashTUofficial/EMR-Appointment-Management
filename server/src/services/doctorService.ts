@@ -1,6 +1,6 @@
 import type { Types } from "mongoose";
 import { Department } from "../models/department";
-import { User, type UserDoc } from "../models/user";
+import { User, type Role, type UserDoc } from "../models/user";
 import { AppError } from "../utils/AppError";
 import type { ScheduleInput } from "../validators/doctor";
 import { logAudit } from "./auditService";
@@ -23,7 +23,7 @@ const toDoctor = (user: DoctorUser) => {
 };
 
 // Doctors only ever see themselves.
-export async function listDoctors(viewer: { id: string; role: string }, departmentId?: string) {
+export async function listDoctors(viewer: { id: string; role: Role }, departmentId?: string) {
   const filter = viewer.role === "DOCTOR" ? { _id: viewer.id } : departmentId ? { "doctorProfile.departmentId": departmentId } : {};
   const doctors = await User.find({ role: "DOCTOR", ...filter }).sort("name").lean();
   return doctors.map(toDoctor);
@@ -38,7 +38,7 @@ export async function createDoctor(
   const { departmentId, specialization, ...fields } = input;
   // A new doctor has no working days yet; the schedule is set separately.
   const doctor = await createStaff(
-    { ...fields, role: "DOCTOR", doctorProfile: { departmentId, specialization, slotDurationMinutes: 15, workingDays: [] } },
+    { ...fields, role: "DOCTOR", doctorProfile: { departmentId, specialization, workingDays: [] } },
     adminId,
   );
   return toDoctor(doctor);

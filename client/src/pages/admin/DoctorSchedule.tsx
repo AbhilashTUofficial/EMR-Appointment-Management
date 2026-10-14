@@ -11,9 +11,9 @@ import { Spinner } from "../../components/Spinner";
 import { DAY_NAMES, WEEK_ORDER } from "../../days";
 import { useDoctors } from "../../hooks/queries";
 
-type DayState = { sessions: TimeRange[]; breaks: TimeRange[] };
+type DayState = Omit<WorkingDay, "day">;
 
-const SLOT_LENGTHS = [5, 10, 15, 20, 30, 45, 60];
+const SLOT_LENGTHS = [5, 10, 15, 20, 30, 45, 60, 90, 120];
 
 export default function DoctorSchedule() {
   const { id } = useParams();
@@ -101,16 +101,12 @@ function ScheduleEditor({ doctor }: { doctor: Doctor }) {
               {state && (
                 <div className="mt-3 space-y-4">
                   <RangeList
-                    title="Sessions"
                     noun="session"
-                    addLabel="Add session"
                     ranges={state.sessions}
                     onChange={(sessions) => setDay(day, { ...state, sessions })}
                   />
                   <RangeList
-                    title="Breaks"
                     noun="break"
-                    addLabel="Add break"
                     ranges={state.breaks}
                     onChange={(breaks) => setDay(day, { ...state, breaks })}
                   />
@@ -148,18 +144,15 @@ function ScheduleEditor({ doctor }: { doctor: Doctor }) {
 
 // Used for both sessions and breaks: a list of named time ranges.
 function RangeList({
-  title,
   noun,
-  addLabel,
   ranges,
   onChange,
 }: {
-  title: string;
   noun: string;
-  addLabel: string;
   ranges: TimeRange[];
   onChange: (ranges: TimeRange[]) => void;
 }) {
+  const title = `${noun[0].toUpperCase()}${noun.slice(1)}s`;
   const update = (index: number, patch: Partial<TimeRange>) =>
     onChange(ranges.map((range, i) => (i === index ? { ...range, ...patch } : range)));
 
@@ -206,7 +199,7 @@ function RangeList({
         onClick={() => onChange([...ranges, { name: "", start: "09:00", end: "10:00" }])}
         className="mt-2 text-sm text-blue-700 hover:underline"
       >
-        + {addLabel}
+        + Add {noun}
       </button>
     </div>
   );

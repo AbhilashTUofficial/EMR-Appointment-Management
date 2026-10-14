@@ -1,4 +1,5 @@
 import bcrypt from "bcrypt";
+import { mongo } from "mongoose";
 import { BCRYPT_ROUNDS } from "../config/security";
 import { User } from "../models/user";
 import { AppError } from "../utils/AppError";
@@ -14,7 +15,7 @@ export async function createStaff({ password, ...fields }: NewStaff, adminId: st
   try {
     user = await User.create({ ...fields, passwordHash });
   } catch (err) {
-    if ((err as { code?: number }).code === 11000) throw new AppError(409, "EMAIL_TAKEN", "A user with this email already exists");
+    if (err instanceof mongo.MongoServerError && err.code === 11000) throw new AppError(409, "EMAIL_TAKEN", "A user with this email already exists");
     throw err;
   }
 

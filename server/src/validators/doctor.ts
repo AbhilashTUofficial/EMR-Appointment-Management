@@ -2,12 +2,7 @@ import { z } from "zod";
 import { HHMM } from "../utils/patterns";
 import { rangesOverlap, toMinutes } from "../utils/time";
 import { objectId } from "./common";
-
-export const createStaffSchema = z.object({
-  name: z.string().trim().min(2, "Enter a name").max(100),
-  email: z.email().trim().toLowerCase(),
-  password: z.string().min(8, "Use at least 8 characters").max(72),
-});
+import { createStaffSchema } from "./staff";
 
 export const createDoctorSchema = createStaffSchema.extend({
   departmentId: objectId,
@@ -39,6 +34,11 @@ export const scheduleSchema = z
   })
   .refine((s) => new Set(s.workingDays.map((d) => d.day)).size === s.workingDays.length, {
     message: "A day appears more than once",
+    path: ["workingDays"],
+  })
+  // A shorter session would produce no slots at all.
+  .refine((s) => s.workingDays.every((d) => d.sessions.every((r) => toMinutes(r.end) - toMinutes(r.start) >= s.slotDurationMinutes)), {
+    message: "Every session must be at least one slot long",
     path: ["workingDays"],
   });
 
