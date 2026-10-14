@@ -51,3 +51,21 @@ Each index is there for a query the screens will run:
 - `auditlogs {createdAt}` and `{entityType, entityId, createdAt}`: recent activity and the history of one record.
 
 Not every filter combination is indexed. Each extra index slows down writes, so only the combinations above are covered.
+
+## Authentication
+
+**Two tokens.** A short-lived access token (15 minutes) is sent on every API call and holds only the user id and role, so checking it needs no database lookup. A longer-lived refresh token (7 days) exists only to get a new access token.
+
+**Where the tokens live.** The access token is returned in the response body and kept in memory by the client, so injected scripts can't read it from storage. The refresh token is an httpOnly, SameSite=Strict cookie limited to `/api/v1/auth`, so scripts can't read it and the browser only sends it to the auth routes. SameSite=Strict plus a JSON-only API covers CSRF for the one endpoint that uses the cookie.
+
+**Refresh tokens are single-use and stored hashed.** Only a SHA-256 hash is saved, so a database leak doesn't give out usable tokens. On refresh the old token is deleted and a new one issued. The delete is atomic, so two requests racing with the same token can't both succeed. If a valid token is no longer stored, it was already used, so every refresh token of that user is deleted and they have to log in again. Logout deletes the token.
+
+**Two separate secrets** sign the access and refresh tokens, so one can't be passed off as the other. Verification pins the algorithm to HS256.
+
+**Login answers the same way for every failure.** Unknown email, wrong password and inactive account all return the same 401 message. When the email doesn't exist, the password is still compared against a dummy hash so response time doesn't reveal which emails are registered. Passwords are hashed with bcrypt (cost 12). Login is limited to 10 attempts per 15 minutes per IP.
+
+**Authorization is checked on the server.** `authorize(...roles)` runs on each route after `authenticate`. The role comes from the signed token, never from the request.
+
+**Audit trail.** Logins (successful and failed) and logouts are written to `auditlogs`. A failed audit write is logged but does not fail the request.
+
+**Known limit.** A deactivated user's current access token keeps working until it expires (at most 15 minutes), because access tokens are not checked against the database.
