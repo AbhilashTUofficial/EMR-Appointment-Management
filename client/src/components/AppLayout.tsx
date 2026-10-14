@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router";
 import type { Role } from "../api/http";
 import { useAuth } from "../auth/AuthContext";
+import { useRealtime } from "../hooks/useRealtime";
 import { Button } from "./Button";
 
 const links: { to: string; label: string; roles?: Role[] }[] = [
@@ -19,6 +20,7 @@ const roleLabel: Record<Role, string> = {
 
 export function AppLayout() {
   const { user, logout } = useAuth();
+  useRealtime();
   if (!user) return null;
 
   return (
