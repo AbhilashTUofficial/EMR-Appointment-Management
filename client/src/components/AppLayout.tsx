@@ -6,6 +6,7 @@ import { Button } from "./Button";
 const links: { to: string; label: string; roles?: Role[] }[] = [
   { to: "/", label: "Dashboard" },
   { to: "/scheduler", label: "Scheduler" },
+  { to: "/appointments", label: "Appointments" },
   { to: "/admin/doctors", label: "Doctors", roles: ["SUPER_ADMIN"] },
   { to: "/admin/receptionists", label: "Receptionists", roles: ["SUPER_ADMIN"] },
 ];
