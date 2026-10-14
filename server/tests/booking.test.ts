@@ -146,10 +146,10 @@ describe("POST /appointments", () => {
   });
 
   describe("rejects", () => {
-    const rejected = async (body: object, status: number, code?: string) => {
+    const rejected = async (body: object, status: number, code: string) => {
       const res = await receptionist.post("/api/v1/appointments").send(body);
       expect(res.status).toBe(status);
-      if (code) expect(res.body.code).toBe(code);
+      expect(res.body.code).toBe(code);
       expect(await Appointment.countDocuments()).toBe(0);
       expect(await Patient.countDocuments()).toBe(0);
     };
@@ -161,11 +161,11 @@ describe("POST /appointments", () => {
     it("an unknown doctor", () => rejected(booking({ doctorId: "64b000000000000000000000" }), 404, "DOCTOR_NOT_FOUND"));
     it("an unknown patient", () =>
       rejected(booking({ newPatient: undefined, patientId: "64b000000000000000000000" }), 404, "PATIENT_NOT_FOUND"));
-    it("both an existing and a new patient", () => rejected(booking({ patientId: "64b000000000000000000000" }), 400));
-    it("neither an existing nor a new patient", () => rejected(booking({ newPatient: undefined }), 400));
-    it("an invalid mobile number", () => rejected(booking({ newPatient: newPatient({ mobile: "12345" }) }), 400));
-    it("a missing purpose", () => rejected(booking({ purpose: "  " }), 400));
-    it("an impossible date", () => rejected(booking({ date: "2099-02-31" }), 400));
+    it("both an existing and a new patient", () => rejected(booking({ patientId: "64b000000000000000000000" }), 400, "VALIDATION_ERROR"));
+    it("neither an existing nor a new patient", () => rejected(booking({ newPatient: undefined }), 400, "VALIDATION_ERROR"));
+    it("an invalid mobile number", () => rejected(booking({ newPatient: newPatient({ mobile: "12345" }) }), 400, "VALIDATION_ERROR"));
+    it("a missing purpose", () => rejected(booking({ purpose: "  " }), 400, "VALIDATION_ERROR"));
+    it("an impossible date", () => rejected(booking({ date: "2099-02-31" }), 400, "VALIDATION_ERROR"));
   });
 
   describe("double booking", () => {

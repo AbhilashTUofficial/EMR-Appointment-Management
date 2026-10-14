@@ -129,12 +129,11 @@ Booking body:
 {
   "doctorId": "…", "date": "2026-10-19", "slotStart": "10:00",
   "purpose": "Fever for three days", "notes": "optional",
-  "patientId": "…"                       // an existing patient, or
   "newPatient": { "name": "Asha Nair", "mobile": "98765 43210", "gender": "FEMALE", "dateOfBirth": "1990-05-01" }
 }
 ```
 
-Send exactly one of `patientId` and `newPatient`. A new patient is registered with the next patient ID. The appointment is linked to the patient, the doctor, the doctor's department and the slot.
+For a patient who is already registered, send `"patientId": "…"` instead of `newPatient`. Send exactly one of the two. A new patient is registered with the next patient ID. The appointment is linked to the patient, the doctor, the doctor's department and the slot.
 
 Errors: `400` for invalid input, a time that isn't one of the doctor's slots (`SLOT_NOT_AVAILABLE`, which covers breaks and times off the slot grid) or a slot in the past (`SLOT_IN_PAST`); `404` for an unknown doctor or patient; `409` `SLOT_ALREADY_BOOKED` when someone else got the slot first.
 

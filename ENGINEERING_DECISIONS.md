@@ -124,7 +124,7 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 
 **The database enforces it, not the application.** Appointments have a unique index on doctor, date and slot start, limited to documents where `isActive` is true. If two requests try to book the same slot at the same moment, both inserts reach MongoDB and exactly one succeeds. The other gets a duplicate-key error, which the service turns into `409 SLOT_ALREADY_BOOKED`. Nothing in the application has to be correct about timing for this to hold.
 
-**Why not "check, then insert".** Two requests can both check, both see the slot free, and both insert. The check only narrows the window. The service still does one before inserting, but only so most late requests fail early and cheaply, before a patient record is created for them. A comment in the code says the index is the real guard, and a test removes the check and shows the guarantee still holds.
+**Why not "check, then insert".** Two requests can both check, both see the slot free, and both insert. The check only narrows the window. The service still does one before inserting, but only so most late requests fail early and cheaply, before a patient record is created for them. A comment in the code says the index is the real guard. Removing the check doesn't change the outcome: the concurrency test below passes without it, because the index alone decides the winner.
 
 **Cancelled appointments free the slot.** A cancelled appointment is kept for the record but has `isActive: false`, so it drops out of the index and the slot can be booked again. This is why the index is partial and why `isActive` exists at all.
 

@@ -53,7 +53,9 @@ export default function Book() {
   const [mode, setMode] = useState<Mode>("existing");
   const [booked, setBooked] = useState<Appointment | null>(null);
 
-  if (!doctorId || !date || !slot) {
+  // The link normally comes from the scheduler; anything else is rejected here instead of after the form is filled in.
+  const validLink = doctorId && date && slot && /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(slot);
+  if (!validLink) {
     return (
       <div className="space-y-3">
         <ErrorAlert>Choose a slot in the scheduler first.</ErrorAlert>
@@ -143,7 +145,8 @@ function BookingForm({ mode, slot, schedulerLink, onBooked }: FormProps) {
   });
 
   return (
-    <form onSubmit={submit} noValidate className="space-y-4">
+    // Pressing Enter twice would otherwise send the booking twice.
+    <form onSubmit={(e) => !isSubmitting && submit(e)} noValidate className="space-y-4">
       {mode === "existing" ? (
         <PatientPicker
           selected={patient}

@@ -45,6 +45,8 @@ export async function createPatient(input: NewPatientInput, actor: { id: string;
   return patient;
 }
 
+export const deletePatient = (id: Types.ObjectId) => Patient.deleteOne({ _id: id });
+
 export async function getPatient(id: string) {
   const patient = await Patient.findById(id);
   if (!patient) throw new AppError(404, "PATIENT_NOT_FOUND", "Patient not found");

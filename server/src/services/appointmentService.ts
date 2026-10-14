@@ -1,13 +1,12 @@
 import { env } from "../config/env";
 import { Appointment } from "../models/appointment";
-import { Patient } from "../models/patient";
 import { User, type Role } from "../models/user";
 import { AppError } from "../utils/AppError";
 import { isDuplicateKeyError } from "../utils/mongo";
 import { clinicNow } from "../utils/time";
 import type { CreateAppointmentInput } from "../validators/appointment";
 import { logAudit } from "./auditService";
-import { createPatient, getPatient, toPatient } from "./patientService";
+import { createPatient, deletePatient, getPatient, toPatient } from "./patientService";
 import { generateSchedule, hasPassed } from "./slotService";
 
 const slotTaken = () => new AppError(409, "SLOT_ALREADY_BOOKED", "This slot has just been booked. Please pick another.");
@@ -30,8 +29,9 @@ export async function createAppointment(input: CreateAppointmentInput, user: { i
   const holdsSlot = { doctorId: input.doctorId, date: input.date, slotStart: slot.start, isActive: true };
   if (await Appointment.exists(holdsSlot)) throw slotTaken();
 
-  const newPatient = input.newPatient && (await createPatient(input.newPatient, user));
-  const patient = newPatient || (await getPatient(input.patientId!));
+  // The request schema guarantees exactly one of newPatient and patientId.
+  const created = input.newPatient ? await createPatient(input.newPatient, user) : undefined;
+  const patient = created ?? (await getPatient(input.patientId!));
 
   let appointment;
   try {
@@ -48,8 +48,8 @@ export async function createAppointment(input: CreateAppointmentInput, user: { i
     });
   } catch (err) {
     // Lost the race for the slot: don't leave behind the patient this request just created.
-    if (newPatient) await Patient.deleteOne({ _id: newPatient._id });
-    throw isDuplicateKeyError(err) ? slotTaken() : err;
+    if (created) await deletePatient(created._id);
+    throw isDuplicateKeyError(err, "slotStart") ? slotTaken() : err;
   }
 
   await logAudit({ userId: user.id, role: user.role, action: "APPOINTMENT_CREATED", entityType: "Appointment", entityId: appointment._id });
