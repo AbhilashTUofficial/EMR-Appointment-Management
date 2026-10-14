@@ -13,6 +13,7 @@ const patientSchema = new Schema(
   { timestamps: true },
 );
 
+// Patient names are not edited after registration; if that changes, nameLower must be updated alongside name.
 patientSchema.pre("validate", function () {
   this.nameLower = this.name?.toLowerCase();
 });

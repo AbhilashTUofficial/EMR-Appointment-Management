@@ -6,7 +6,7 @@ Work in progress: this README grows as each part is built.
 
 ## Stack
 
-- **Server:** Node.js, Express 5, MongoDB with Mongoose, Zod, bcrypt
+- **Server:** Node.js, Express 5, MongoDB with Mongoose, Zod
 - **Client:** React, React Router, TanStack Query, Tailwind CSS (Vite)
 
 ## Folder structure
@@ -71,8 +71,8 @@ users ──< appointments >── patients
   │            │
   │            └── departments
   └─ doctorProfile.departmentId ── departments
-users ──< refreshTokens
-auditLogs, counters (standalone)
+users ──< refreshtokens
+auditlogs, counters (standalone)
 ```
 
 | Collection | Purpose |
@@ -81,18 +81,21 @@ auditLogs, counters (standalone)
 | `departments` | Name and code |
 | `patients` | Patient code (`PT-000042`), name, mobile, gender, date of birth |
 | `appointments` | Patient, doctor, department, date, slot, status, purpose and notes |
-| `refreshTokens` | Hashed refresh tokens, removed automatically after they expire |
-| `auditLogs` | Who did what to which record, and when |
-| `counters` | Sequence for patient codes |
+| `refreshtokens` | Hashed refresh tokens, removed automatically after they expire |
+| `auditlogs` | Who did what to which record, and when |
+| `counters` | Sequence numbers (used for patient codes) |
 
-Indexes on `appointments`:
+Sample appointment:
 
-| Index | Used for |
-|---|---|
-| `{doctorId, date, slotStart}` unique, only where `isActive` is true | Stops two active bookings of the same slot; also the lookup of a doctor's bookings on a date |
-| `{doctorId, date, status}` | A doctor's own list and status filters |
-| `{date, slotStart}` | Date-range lists and default sorting |
-| `{departmentId, date}` | Department filter |
-| `{patientId, date}` | A patient's appointments |
+```json
+{
+  "patientId": "664f…", "doctorId": "664e…", "departmentId": "664d…",
+  "date": "2026-10-20", "slotStart": "09:15", "slotEnd": "09:30",
+  "status": "SCHEDULED", "isActive": true,
+  "purpose": "Fever for 3 days", "notes": ""
+}
+```
+
+Index details and the reasoning behind them are in [ENGINEERING_DECISIONS.md](ENGINEERING_DECISIONS.md).
 
 Seeded logins (all use `SEED_PASSWORD`): `admin@emr.test`, `reception@emr.test`, `anita.rao@emr.test`, `vikram.mehta@emr.test`, `sara.thomas@emr.test`.

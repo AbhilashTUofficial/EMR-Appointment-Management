@@ -46,24 +46,28 @@ describe("appointment slot index", () => {
   });
 
   it("allows the same time for a different doctor or a different date", async () => {
-    await Appointment.create(slot({ slotStart: "11:00" }));
-    await Appointment.create(slot({ slotStart: "11:00" }));
     const doctorId = new Types.ObjectId();
     await Appointment.create(slot({ doctorId, slotStart: "11:00" }));
-    await Appointment.create(slot({ doctorId, slotStart: "11:00", date: "2026-10-21" }));
+    await expect(Appointment.create(slot({ slotStart: "11:00" }))).resolves.toBeTruthy();
+    await expect(Appointment.create(slot({ doctorId, slotStart: "11:00", date: "2026-10-21" }))).resolves.toBeTruthy();
   });
 });
 
 describe("users", () => {
-  it("requires a doctor profile for doctors and a unique email", async () => {
-    const dept = await Department.create({ name: "Cardiology", code: "car" });
-    const base = { name: "Dr X", email: "Dr.X@emr.test", passwordHash: "hash", role: "DOCTOR" as const };
+  const doctor = { name: "Dr X", email: "Dr.X@emr.test", passwordHash: "hash", role: "DOCTOR" as const };
 
-    await expect(User.create(base)).rejects.toThrow(/profile/i);
-    const doctor = await User.create({ ...base, doctorProfile: { departmentId: dept._id } });
-    expect(doctor.email).toBe("dr.x@emr.test");
-    expect(doctor.doctorProfile?.slotDurationMinutes).toBe(15);
-    await expect(User.create({ ...base, role: "RECEPTIONIST" as const })).rejects.toMatchObject({ code: 11000 });
+  it("requires a profile for doctors", async () => {
+    await expect(User.create(doctor)).rejects.toThrow(/profile/i);
+  });
+
+  it("lowercases emails and keeps them unique", async () => {
+    const dept = await Department.create({ name: "Cardiology", code: "car" });
+    const created = await User.create({ ...doctor, doctorProfile: { departmentId: dept._id } });
+    expect(created.email).toBe("dr.x@emr.test");
+    expect(created.doctorProfile?.slotDurationMinutes).toBe(15);
+    await expect(
+      User.create({ ...doctor, email: "DR.X@emr.test", doctorProfile: { departmentId: dept._id } }),
+    ).rejects.toMatchObject({ code: 11000 });
   });
 
   it("does not return the password hash by default", async () => {

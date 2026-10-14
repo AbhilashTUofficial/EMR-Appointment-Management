@@ -6,14 +6,14 @@ import { User } from "../models/user";
 
 // Safe to run repeatedly: existing departments and users are left alone.
 
-const weekdays = [1, 2, 3, 4, 5];
-const sixDays = [1, 2, 3, 4, 5, 6];
+type Range = [name: string, start: string, end: string];
 
-const day = (d: number, sessions: [string, string][], breaks: [string, string][] = []) => ({
-  day: d,
-  sessions: sessions.map(([start, end], i) => ({ name: i === 0 ? "Morning" : "Evening", start, end })),
-  breaks: breaks.map(([start, end]) => ({ name: "Break", start, end })),
-});
+const weeklySchedule = (days: number[], sessions: Range[], breaks: Range[] = []) =>
+  days.map((day) => ({
+    day,
+    sessions: sessions.map(([name, start, end]) => ({ name, start, end })),
+    breaks: breaks.map(([name, start, end]) => ({ name, start, end })),
+  }));
 
 const departments = [
   { name: "General Medicine", code: "GEN" },
@@ -26,27 +26,36 @@ const doctors = [
   {
     name: "Dr. Anita Rao",
     email: "anita.rao@emr.test",
-    dept: "GEN",
-    slot: 15,
-    days: sixDays.map((d) => day(d, [["09:00", "12:00"], ["13:00", "17:00"]], [["12:00", "13:00"]])),
+    department: "General Medicine",
+    slotDurationMinutes: 15,
+    workingDays: weeklySchedule(
+      [1, 2, 3, 4, 5, 6],
+      [["Morning", "09:00", "12:00"], ["Evening", "13:00", "17:00"]],
+      [["Lunch Break", "12:00", "13:00"]],
+    ),
   },
   {
     name: "Dr. Vikram Mehta",
     email: "vikram.mehta@emr.test",
-    dept: "CAR",
-    slot: 30,
-    days: weekdays.map((d) => day(d, [["10:00", "13:00"], ["14:00", "16:00"]], [["10:30", "10:45"]])),
+    department: "Cardiology",
+    slotDurationMinutes: 30,
+    workingDays: weeklySchedule(
+      [1, 2, 3, 4, 5],
+      [["Morning", "10:00", "13:00"], ["Afternoon", "14:00", "16:00"]],
+      [["Tea Break", "10:30", "10:45"]],
+    ),
   },
   {
     name: "Dr. Sara Thomas",
     email: "sara.thomas@emr.test",
-    dept: "PED",
-    slot: 20,
-    days: [1, 3, 5].map((d) => day(d, [["09:00", "13:00"]])),
+    department: "Pediatrics",
+    slotDurationMinutes: 20,
+    workingDays: weeklySchedule([1, 3, 5], [["Morning", "09:00", "13:00"]]),
   },
 ];
 
 async function seed() {
+  if (process.env.NODE_ENV === "production") throw new Error("Refusing to seed demo accounts in production");
   const password = process.env.SEED_PASSWORD;
   if (!password || password.length < 8) throw new Error("Set SEED_PASSWORD (min 8 characters) in server/.env");
 
@@ -54,28 +63,27 @@ async function seed() {
   const passwordHash = await bcrypt.hash(password, 12);
 
   for (const d of departments) await Department.updateOne({ code: d.code }, d, { upsert: true });
-  const deptId = Object.fromEntries((await Department.find()).map((d) => [d.code, d._id]));
+  const departmentIds = Object.fromEntries((await Department.find()).map((d) => [d.name, d._id]));
 
   const users = [
     { name: "Super Admin", email: "admin@emr.test", role: "SUPER_ADMIN" as const },
     { name: "Riya Sharma", email: "reception@emr.test", role: "RECEPTIONIST" as const },
-    ...doctors.map((d) => ({
-      name: d.name,
-      email: d.email,
+    ...doctors.map(({ department, slotDurationMinutes, workingDays, ...doctor }) => ({
+      ...doctor,
       role: "DOCTOR" as const,
       doctorProfile: {
-        departmentId: deptId[d.dept],
-        specialization: departments.find((x) => x.code === d.dept)!.name,
-        slotDurationMinutes: d.slot,
-        workingDays: d.days,
+        departmentId: departmentIds[department],
+        specialization: department,
+        slotDurationMinutes,
+        workingDays,
       },
     })),
   ];
 
-  for (const u of users) {
-    if (await User.exists({ email: u.email })) continue;
-    await User.create({ ...u, passwordHash });
-    console.log(`created ${u.role.padEnd(12)} ${u.email}`);
+  for (const user of users) {
+    if (await User.exists({ email: user.email })) continue;
+    await User.create({ ...user, passwordHash });
+    console.log(`created ${user.role.padEnd(12)} ${user.email}`);
   }
   console.log("Seed finished");
 }

@@ -20,7 +20,7 @@ Decisions are added as each part of the project is built.
 
 ## MongoDB schema
 
-**Seven collections:** users, departments, patients, appointments, refreshTokens, auditLogs, counters.
+**Seven collections:** users, departments, patients, appointments, refreshtokens, auditlogs, counters.
 
 **One `users` collection for all roles.** Doctors, receptionists and admins all log in the same way, so they share a collection and a `role` field. A doctor's department, slot length and weekly schedule live in an embedded `doctorProfile`. A schedule is always read together with its doctor and never queried on its own, so embedding saves a join, and `appointment.doctorId` is simply the user's `_id`.
 
@@ -36,8 +36,9 @@ Decisions are added as each part of the project is built.
 
 ## Indexes
 
-Every index exists for a specific query:
+Each index is there for a query the screens will run:
 
+- `departments.name` and `departments.code` (unique): no duplicate departments.
 - `users.email` (unique): login lookup and duplicate-email protection.
 - `users {role, doctorProfile.departmentId}`: listing doctors, optionally by department.
 - `patients.patientCode` (unique), `patients.mobile`, `patients.nameLower`: the three ways receptionists look a patient up.
@@ -45,8 +46,8 @@ Every index exists for a specific query:
 - `appointments {doctorId, date, status}`: a doctor's own list, including cancelled, and status filters.
 - `appointments {date, slotStart}`: date-range lists across doctors and the default sort.
 - `appointments {departmentId, date}`: department filter.
-- `appointments {patientId, date}`: looking up a patient's appointments.
-- `refreshTokens.tokenHash` (unique) and `refreshTokens.expiresAt` (TTL): token lookup, and MongoDB deletes expired tokens by itself.
-- `auditLogs {createdAt}` and `{entityType, entityId, createdAt}`: recent activity and the history of one record.
+- `appointments {patientId, date desc}`: looking up a patient's appointments.
+- `refreshtokens.tokenHash` (unique): token lookup. `refreshtokens.userId`: revoke all of a user's tokens in one query. `refreshtokens.expiresAt` (TTL): MongoDB deletes expired tokens by itself.
+- `auditlogs {createdAt}` and `{entityType, entityId, createdAt}`: recent activity and the history of one record.
 
-Not every filter combination is indexed. Each extra index slows down writes, and the combinations above cover the queries the screens actually run.
+Not every filter combination is indexed. Each extra index slows down writes, so only the combinations above are covered.

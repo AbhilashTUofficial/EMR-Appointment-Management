@@ -1,4 +1,5 @@
 import { Schema, model } from "mongoose";
+import { HHMM, ISO_DATE } from "../utils/patterns";
 
 export const APPOINTMENT_STATUSES = ["SCHEDULED", "ARRIVED", "COMPLETED", "CANCELLED"] as const;
 
@@ -9,9 +10,9 @@ const appointmentSchema = new Schema(
     patientId: ref("Patient"),
     doctorId: ref("User"),
     departmentId: ref("Department"), // copied from the doctor at booking so list filters need no join
-    date: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ }, // clinic-local YYYY-MM-DD
-    slotStart: { type: String, required: true, match: /^\d{2}:\d{2}$/ },
-    slotEnd: { type: String, required: true, match: /^\d{2}:\d{2}$/ },
+    date: { type: String, required: true, match: ISO_DATE }, // clinic-local YYYY-MM-DD
+    slotStart: { type: String, required: true, match: HHMM },
+    slotEnd: { type: String, required: true, match: HHMM },
     status: { type: String, enum: APPOINTMENT_STATUSES, default: "SCHEDULED" },
     isActive: { type: Boolean, default: true }, // true while the appointment holds its slot
     purpose: { type: String, trim: true },
