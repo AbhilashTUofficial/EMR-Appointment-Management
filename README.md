@@ -6,7 +6,7 @@ Work in progress: this README grows as each part is built.
 
 ## Stack
 
-- **Server:** Node.js, Express 5, MongoDB with Mongoose, Zod
+- **Server:** Node.js, Express 5, MongoDB with Mongoose, Zod, JWT
 - **Client:** React, React Router, TanStack Query, Tailwind CSS (Vite)
 
 ## Folder structure
@@ -28,7 +28,7 @@ client/
     main.tsx  router.tsx
 ```
 
-More folders (services, controllers, validators) are added with the features that need them.
+
 
 ## Getting started
 
@@ -60,7 +60,35 @@ Every response uses the same envelope:
 { "success": false, "message": "Invalid request", "code": "VALIDATION_ERROR", "errors": [{ "field": "email", "message": "…" }] }
 ```
 
-All routes live under `/api/v1`. Currently: `GET /api/v1/health`.
+All routes live under `/api/v1`.
+
+## Authentication
+
+Users log in with email and password. Login returns a short-lived access token in the response body (15 minutes). The client keeps it in memory and sends it as `Authorization: Bearer <token>`. A refresh token (7 days) is set as an httpOnly cookie that is only sent to `/api/v1/auth/*`.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/auth/login` | `{ email, password }` returns `{ user, accessToken }` and sets the refresh cookie. Limited to 10 attempts per 15 minutes per IP |
+| POST | `/auth/refresh` | Uses the cookie. Returns a new `{ user, accessToken }` and a new refresh cookie; the old refresh token stops working |
+| POST | `/auth/logout` | Deletes the refresh token and clears the cookie |
+
+Errors: `400` invalid body, `401` wrong credentials or missing/invalid token, `403` role not allowed, `429` too many login attempts.
+
+Roles are `SUPER_ADMIN`, `RECEPTIONIST` and `DOCTOR`. Routes are protected with the `authenticate` and `authorize(...roles)` middlewares.
+
+Other: `GET /api/v1/health`.
+
+## Environment variables
+
+See `server/.env.example`.
+
+| Variable | Purpose |
+|---|---|
+| `PORT` | Server port (default 4000) |
+| `CLIENT_ORIGIN` | Allowed CORS origin (default http://localhost:5173) |
+| `MONGODB_URI` | MongoDB connection string |
+| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Token signing secrets, at least 32 characters each and different from each other |
+| `SEED_PASSWORD` | Password for the accounts created by the seed script |
 
 ## Database
 

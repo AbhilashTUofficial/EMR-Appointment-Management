@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import mongoose from "mongoose";
 import { connectDb } from "../config/db";
+import { BCRYPT_ROUNDS } from "../config/security";
 import { Department } from "../models/department";
 import { User } from "../models/user";
 
@@ -60,7 +61,7 @@ async function seed() {
   if (!password || password.length < 8) throw new Error("Set SEED_PASSWORD (min 8 characters) in server/.env");
 
   await connectDb();
-  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
   for (const d of departments) await Department.updateOne({ code: d.code }, d, { upsert: true });
   const departmentIds = Object.fromEntries((await Department.find()).map((d) => [d.name, d._id]));
