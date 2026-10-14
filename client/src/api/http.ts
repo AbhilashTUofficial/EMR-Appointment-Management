@@ -11,10 +11,9 @@ export class ApiError extends Error {
   }
 }
 
-// Every API call goes through here so the envelope is unwrapped and errors look the same everywhere.
+// Every API call goes through here so failures always surface as an ApiError.
 export async function http<T>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
   const res = await fetch(`/api/v1${path}`, {
-    credentials: "include",
     ...init,
     headers: { "Content-Type": "application/json", ...init.headers },
   });

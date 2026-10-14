@@ -6,7 +6,7 @@ Work in progress: this README grows as each part is built.
 
 ## Stack
 
-- **Server:** Node.js, Express 5, MongoDB with Mongoose, Zod
+- **Server:** Node.js, Express 5, Zod (MongoDB and Mongoose are added with the database layer)
 - **Client:** React, React Router, TanStack Query, Tailwind CSS (Vite)
 
 ## Folder structure
@@ -32,7 +32,7 @@ More folders (models, services, controllers, validators) are added with the feat
 
 ## Getting started
 
-Requires Node 22+ (developed on Node 24).
+Requires Node 22 or newer (developed on Node 24).
 
 ```bash
 npm install

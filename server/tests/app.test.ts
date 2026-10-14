@@ -21,6 +21,15 @@ describe("app", () => {
       .set("Content-Type", "application/json")
       .send("{bad");
     expect(res.status).toBe(400);
-    expect(res.body.code).toBe("BAD_JSON");
+    expect(res.body.code).toBe("BAD_REQUEST");
+  });
+
+  it("returns 413 for oversized bodies", async () => {
+    const res = await request(app)
+      .post("/api/v1/health")
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ blob: "x".repeat(200_000) }));
+    expect(res.status).toBe(413);
+    expect(res.body.success).toBe(false);
   });
 });

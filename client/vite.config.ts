@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-// The proxy keeps the API same-origin in dev, so the refresh cookie works without extra CORS setup.
+// Proxying /api keeps the browser on one origin in dev, so no CORS setup is needed locally.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
