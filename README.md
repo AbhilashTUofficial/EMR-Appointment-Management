@@ -7,7 +7,7 @@ Work in progress: this README grows as each part is built.
 ## Stack
 
 - **Server:** Node.js, Express 5, MongoDB with Mongoose, Zod, JWT
-- **Client:** React, React Router, TanStack Query, Tailwind CSS (Vite)
+- **Client:** React, React Router, TanStack Query, React Hook Form, Zod, Tailwind CSS (Vite)
 
 ## Folder structure
 
