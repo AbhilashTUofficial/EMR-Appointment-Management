@@ -4,6 +4,7 @@ import { Appointment, type AppointmentDoc, type AppointmentStatus } from "../mod
 import { Patient } from "../models/patient";
 import { User, type Role } from "../models/user";
 import { AppError } from "../utils/AppError";
+import { publish } from "../realtime";
 import { canTransition } from "../utils/appointmentStatus";
 import { escapeRegex, isDuplicateKeyError } from "../utils/mongo";
 import { clinicNow } from "../utils/time";
@@ -93,6 +94,7 @@ export async function createAppointment(input: CreateAppointmentInput, user: Vie
   }
 
   await logAudit({ userId: user.id, role: user.role, action: "APPOINTMENT_CREATED", entityType: "Appointment", entityId: appointment._id });
+  publish("appointment:created", appointment);
   return toAppointment(appointment, patient, doctor, user);
 }
 
@@ -170,6 +172,7 @@ export async function updateAppointment(id: string, changes: UpdateAppointmentIn
   if (!updated) throw new AppError(409, "APPOINTMENT_LOCKED", "This appointment was just changed by someone else. Refresh and try again.");
 
   await logAudit({ userId: viewer.id, role: viewer.role, action: "APPOINTMENT_UPDATED", entityType: "Appointment", entityId: updated._id });
+  publish("appointment:updated", updated);
   return (await withPeople([updated], viewer))[0];
 }
 
@@ -198,5 +201,6 @@ export async function changeStatus(id: string, to: Exclude<AppointmentStatus, "S
   if (!updated) throw new AppError(409, "INVALID_STATUS_TRANSITION", "This appointment was just changed by someone else. Refresh and try again.");
 
   await logAudit({ userId: viewer.id, role: viewer.role, action: effect.action, entityType: "Appointment", entityId: updated._id });
+  publish(to === "CANCELLED" ? "appointment:cancelled" : "appointment:updated", updated);
   return (await withPeople([updated], viewer))[0];
 }
