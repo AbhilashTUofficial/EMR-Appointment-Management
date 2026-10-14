@@ -1,4 +1,6 @@
-import { useSearchParams } from "react-router";
+import { useCallback } from "react";
+import { useNavigate, useSearchParams } from "react-router";
+import type { Slot } from "../api/slots";
 import { ErrorAlert } from "../components/ErrorAlert";
 import { Input } from "../components/Input";
 import { Select } from "../components/Select";
@@ -23,6 +25,14 @@ export default function Scheduler() {
   const chosen = params.get("doctor");
   const doctorId = user?.role === "DOCTOR" ? user.id : doctors.data?.find((d) => d.id === chosen)?.id;
   const slots = useSlots(doctorId, date);
+
+  // Only staff who can book get clickable slots. A stable callback keeps the memoized slot buttons from re-rendering.
+  const navigate = useNavigate();
+  const canBook = user?.role === "SUPER_ADMIN" || user?.role === "RECEPTIONIST";
+  const bookSlot = useCallback(
+    (slot: Slot) => navigate(`/book?${new URLSearchParams({ doctorId: doctorId!, date, slot: slot.start })}`),
+    [navigate, doctorId, date],
+  );
 
   const setFilter = (changes: Record<string, string>) =>
     setParams((current) => {
@@ -66,7 +76,7 @@ export default function Scheduler() {
       {slots.data?.isWorkingDay && (
         <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4">
           <SlotLegend />
-          <SlotGrid data={slots.data} />
+          <SlotGrid data={slots.data} onSelect={canBook ? bookSlot : undefined} />
         </div>
       )}
     </div>

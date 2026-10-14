@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getDepartments } from "../api/departments";
 import { getDoctors } from "../api/doctors";
+import { searchPatients } from "../api/patients";
 import { getSlots } from "../api/slots";
 
 // Departments rarely change, so they are cached for the whole session.
@@ -15,3 +16,6 @@ export const useSlots = (doctorId: string | undefined, date: string) =>
     queryFn: () => getSlots(doctorId!, date),
     enabled: !!doctorId && !!date,
   });
+
+export const usePatientSearch = (term: string) =>
+  useQuery({ queryKey: ["patients", term], queryFn: () => searchPatients(term), enabled: term.length > 0 });

@@ -7,7 +7,9 @@ export function applyServerError<T extends FieldValues>(err: unknown, setError: 
   if (!(err instanceof ApiError)) return "Could not reach the server. Try again.";
 
   const fieldErrors = err.code === "EMAIL_TAKEN" ? [{ field: "email", message: err.message }] : err.errors;
-  const shown = fieldErrors.filter((e) => fields.includes(e.field));
+  // The server reports nested fields as "newPatient.mobile"; the form field is just "mobile".
+  const named = fieldErrors.map((e) => ({ field: e.field.split(".").pop()!, message: e.message }));
+  const shown = named.filter((e) => fields.includes(e.field));
   shown.forEach((e) => setError(e.field as Path<T>, { message: e.message }));
   return shown.length ? "" : err.message;
 }
