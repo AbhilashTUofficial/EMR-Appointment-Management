@@ -186,3 +186,21 @@ The summary is one aggregation over today's appointments (by clinic date, for a 
 
 After arrive, cancel or complete, the client refetches the appointment lists, the scheduler's slots and the dashboard counts, so every screen shows the same thing. Live updates for other users' changes are added in the real-time step.
 
+## Real-time updates
+
+**Socket.IO, on the same server as the API.** Socket.IO handles reconnection, rooms and an authentication step on connect, which would otherwise have to be written by hand over plain WebSockets. It shares the HTTP server, so there is nothing extra to deploy.
+
+**The server announces, the client asks.** An event says only that an appointment changed: its id, doctor, date, slot and new status. It never carries patient details. The client responds by refetching what is on screen through the normal API, where permissions are checked as usual. This keeps the socket from becoming a second path around the authorization rules, and means a missed or repeated event can't leave a screen with wrong data, because the next fetch is always the truth.
+
+**Rooms decide who hears what.** On connect, receptionists and admins join one shared room and each doctor joins a room of their own. An appointment event goes to the shared room and to that appointment's doctor, so a doctor never hears about someone else's patients.
+
+**Events are sent after the database write succeeds,** from the service that made the change. A request that fails (for example a booking that loses the race for a slot) sends nothing. A test checks this.
+
+**Authentication.** The connection must present a valid access token, verified once at connect time with the same code the API uses. The client passes the token through a function that runs on every connection attempt, so a reconnect uses the current token. If the token has expired, the connection is refused with `UNAUTHORIZED` and the client renews it (sharing the single refresh request used for API calls) and reconnects.
+
+**Reconnecting.** After any (re)connection the client refetches its screens, because events sent while it was offline are not replayed.
+
+**Where the refetching lives.** One hook, mounted once in the app layout, listens for the events and invalidates the cached queries for slots, appointments and the dashboard. Only queries that are currently on screen refetch; the others are just marked stale. Screens need no code of their own to stay current.
+
+**Known limits.** A socket is authorized when it connects. If a user is deactivated, or their token expires while they stay connected, the connection keeps working until it drops. With more than one server instance, Socket.IO needs a shared adapter (for example Redis) so an event reaches users connected to a different instance; the scaling notes cover this.
+

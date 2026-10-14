@@ -6,7 +6,7 @@ Work in progress: this README grows as each part is built.
 
 ## Stack
 
-- **Server:** Node.js, Express 5, MongoDB with Mongoose, Zod, JWT
+- **Server:** Node.js, Express 5, MongoDB with Mongoose, Zod, Socket.IO, JWT
 - **Client:** React, React Router, TanStack Query, React Hook Form, Zod, Tailwind CSS (Vite)
 
 ## Folder structure
@@ -19,6 +19,7 @@ server/
     routes/        route definitions
     utils/         AppError, response helper
     app.ts         express app
+    realtime.ts    Socket.IO setup and the publish function
     server.ts      entry point
   tests/
 client/
@@ -26,7 +27,7 @@ client/
     api/           fetch wrapper (token handling, refresh) and API calls
     auth/          auth context, route guard
     components/    shared UI: layout, form fields, button, modal, pagination, status badge, slot grid, patient picker, appointment row
-    hooks/         shared data queries
+    hooks/         shared data queries, live updates
     forms.ts       shows server validation errors on form fields
     pages/         one file per screen (admin screens in pages/admin)
     main.tsx  router.tsx
@@ -175,6 +176,20 @@ Anything else is rejected with `409 INVALID_STATUS_TRANSITION`. A cancelled or c
 The response is `{ data: [...], meta: { page, limit, total, totalPages } }`. Unknown sort fields, a limit over 50 and malformed dates are rejected with `400`.
 
 In the app, Appointments lists these with the same filters (kept in the URL), sortable columns and paging, plus the actions each role is allowed. The dashboard shows today's counts and appointments.
+
+## Live updates
+
+Open screens update without a refresh. When an appointment is booked, edited, marked arrived, completed or cancelled, the server sends one of these Socket.IO events:
+
+| Event | When |
+|---|---|
+| `appointment:created` | A slot is booked |
+| `appointment:updated` | Details are edited, the patient arrives, or the visit is completed |
+| `appointment:cancelled` | An appointment is cancelled |
+
+Each event carries only `{ id, doctorId, date, slotStart, status }`. No patient details are sent. The client reacts by refetching what is on screen (the scheduler's slots, the appointment list and the dashboard) through the normal API.
+
+Connecting needs the same access token as the API (`auth: { token }` in the Socket.IO handshake); a missing or invalid token is refused. Receptionists and admins receive every event; a doctor only receives events for their own appointments.
 
 Other: `GET /api/v1/health`.
 
