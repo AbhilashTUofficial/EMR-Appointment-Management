@@ -25,7 +25,7 @@ client/
   src/
     api/           fetch wrapper (token handling, refresh) and API calls
     auth/          auth context, route guard
-    components/    shared UI: layout, form fields, button, modal, pagination, status badge, slot grid, patient picker, forms
+    components/    shared UI: layout, form fields, button, modal, pagination, status badge, slot grid, patient picker, appointment row
     hooks/         shared data queries
     forms.ts       shows server validation errors on form fields
     pages/         one file per screen (admin screens in pages/admin)

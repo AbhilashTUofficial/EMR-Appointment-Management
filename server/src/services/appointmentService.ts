@@ -1,15 +1,15 @@
 import type { Types } from "mongoose";
 import { env } from "../config/env";
-import { Appointment, type AppointmentDoc } from "../models/appointment";
+import { Appointment, type AppointmentDoc, type AppointmentStatus } from "../models/appointment";
 import { Patient } from "../models/patient";
 import { User, type Role } from "../models/user";
 import { AppError } from "../utils/AppError";
-import { canTransition, type AppointmentStatus } from "../utils/appointmentStatus";
+import { canTransition } from "../utils/appointmentStatus";
 import { escapeRegex, isDuplicateKeyError } from "../utils/mongo";
 import { clinicNow } from "../utils/time";
 import type { CreateAppointmentInput, ListAppointmentsQuery, UpdateAppointmentInput } from "../validators/appointment";
 import { logAudit } from "./auditService";
-import { createPatient, deletePatient, getPatient, toPatient } from "./patientService";
+import { createPatient, deletePatient, getPatient, toPatient, type PatientFields } from "./patientService";
 import { generateSchedule, hasPassed } from "./slotService";
 
 type Viewer = { id: string; role: Role };
@@ -23,7 +23,7 @@ const scopeTo = (viewer: Viewer) => (viewer.role === "DOCTOR" ? { doctorId: view
 
 type Person = { _id: Types.ObjectId; name: string };
 
-function toAppointment(a: Row, patient: Parameters<typeof toPatient>[0], doctor: Person, viewer: Viewer) {
+function toAppointment(a: Row, patient: PatientFields, doctor: Person, viewer: Viewer) {
   return {
     id: a._id,
     date: a.date,
@@ -37,7 +37,6 @@ function toAppointment(a: Row, patient: Parameters<typeof toPatient>[0], doctor:
     patient: toPatient(patient),
     doctor: { id: doctor._id, name: doctor.name },
     departmentId: a.departmentId,
-    createdAt: (a as { createdAt?: Date }).createdAt,
   };
 }
 
@@ -134,7 +133,7 @@ export async function listAppointments(query: ListAppointmentsQuery, viewer: Vie
       .skip((query.page - 1) * query.limit)
       .limit(query.limit)
       .lean(),
-    Appointment.countDocuments(filter),
+    Object.keys(filter).length ? Appointment.countDocuments(filter) : Appointment.estimatedDocumentCount(),
   ]);
 
   return {
@@ -155,7 +154,7 @@ export async function updateAppointment(id: string, changes: UpdateAppointmentIn
   const refused = Object.keys(changes).filter((field) => !allowed.includes(field));
   if (refused.length) throw new AppError(403, "FORBIDDEN_FIELD", `You can't change: ${refused.join(", ")}`);
 
-  const appointment = await Appointment.findOne({ _id: id, ...scopeTo(viewer) });
+  const appointment = await Appointment.findOne({ _id: id, ...scopeTo(viewer) }).lean();
   if (!appointment) throw notFound();
 
   if (appointment.status === "CANCELLED") throw new AppError(409, "APPOINTMENT_LOCKED", "A cancelled appointment can't be edited");
@@ -166,11 +165,12 @@ export async function updateAppointment(id: string, changes: UpdateAppointmentIn
     throw new AppError(409, "APPOINTMENT_LOCKED", "A completed appointment can't be edited");
   }
 
-  Object.assign(appointment, changes);
-  await appointment.save();
+  // Conditional on the status just read, so notes can't land on an appointment that was cancelled in the meantime.
+  const updated = await Appointment.findOneAndUpdate({ _id: id, status: appointment.status }, changes, { returnDocument: "after", runValidators: true }).lean();
+  if (!updated) throw new AppError(409, "APPOINTMENT_LOCKED", "This appointment was just changed by someone else. Refresh and try again.");
 
-  await logAudit({ userId: viewer.id, role: viewer.role, action: "APPOINTMENT_UPDATED", entityType: "Appointment", entityId: appointment._id });
-  return getAppointment(id, viewer);
+  await logAudit({ userId: viewer.id, role: viewer.role, action: "APPOINTMENT_UPDATED", entityType: "Appointment", entityId: updated._id });
+  return (await withPeople([updated], viewer))[0];
 }
 
 const statusEffects = {

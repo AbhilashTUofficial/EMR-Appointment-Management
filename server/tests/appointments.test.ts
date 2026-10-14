@@ -3,11 +3,11 @@ import { Types } from "mongoose";
 import { beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/app";
 import { env } from "../src/config/env";
-import { Appointment } from "../src/models/appointment";
+import { Appointment, type AppointmentStatus } from "../src/models/appointment";
 import { AuditLog } from "../src/models/auditLog";
 import { Patient } from "../src/models/patient";
 import { User } from "../src/models/user";
-import { canTransition, type AppointmentStatus } from "../src/utils/appointmentStatus";
+import { canTransition } from "../src/utils/appointmentStatus";
 import { clinicNow } from "../src/utils/time";
 import { accessToken, useTestDb } from "./helpers";
 
@@ -67,20 +67,12 @@ beforeEach(async () => {
 });
 
 describe("appointment status workflow", () => {
-  it.each<[AppointmentStatus, AppointmentStatus, boolean]>([
-    ["SCHEDULED", "ARRIVED", true],
-    ["SCHEDULED", "CANCELLED", true],
-    ["SCHEDULED", "COMPLETED", false],
-    ["SCHEDULED", "SCHEDULED", false],
-    ["ARRIVED", "COMPLETED", true],
-    ["ARRIVED", "CANCELLED", false],
-    ["ARRIVED", "SCHEDULED", false],
-    ["COMPLETED", "ARRIVED", false],
-    ["COMPLETED", "CANCELLED", false],
-    ["CANCELLED", "SCHEDULED", false],
-    ["CANCELLED", "ARRIVED", false],
-  ])("%s -> %s is allowed: %s", (from, to, allowed) => {
-    expect(canTransition(from, to)).toBe(allowed);
+  const allowed = new Set(["SCHEDULED>ARRIVED", "SCHEDULED>CANCELLED", "ARRIVED>COMPLETED"]);
+  const all = ["SCHEDULED", "ARRIVED", "COMPLETED", "CANCELLED"] as const satisfies readonly AppointmentStatus[];
+
+  // Every pair of statuses: only the three moves in the workflow are allowed.
+  it.each(all.flatMap((from) => all.map((to) => [from, to] as const)))("%s -> %s", (from, to) => {
+    expect(canTransition(from, to)).toBe(allowed.has(`${from}>${to}`));
   });
 });
 
@@ -134,7 +126,7 @@ describe("GET /appointments", () => {
 
   it("treats search text literally and rejects bad parameters", async () => {
     expect((await list("?patient=.*")).meta.total).toBe(0);
-    for (const bad of ["?limit=51", "?limit=0", "?page=0", "?sortBy=passwordHash", "?order=sideways", "?status=DONE", "?from=2099-13-01", "?from=2099-03-05&to=2099-03-01", "?doctorId=nope"]) {
+    for (const bad of ["?limit=51", "?limit=0", "?page=0", "?page=10001", "?sortBy=passwordHash", "?order=sideways", "?status=DONE", "?from=2099-13-01", "?from=2099-03-05&to=2099-03-01", "?doctorId=nope"]) {
       expect((await receptionist.get(`/api/v1/appointments${bad}`)).status, bad).toBe(400);
     }
   });

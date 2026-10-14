@@ -1,4 +1,4 @@
-export type AppointmentStatus = "SCHEDULED" | "ARRIVED" | "COMPLETED" | "CANCELLED";
+import type { AppointmentStatus } from "../models/appointment";
 
 // SCHEDULED -> ARRIVED -> COMPLETED, or SCHEDULED -> CANCELLED. Completed and cancelled are final.
 const transitions: Record<AppointmentStatus, AppointmentStatus[]> = {

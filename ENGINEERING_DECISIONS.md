@@ -168,7 +168,11 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 
 **Sorting can't be steered by the caller.** The sort field comes from a fixed list (`date`, `createdAt`, `status`); anything else is rejected. The record id is always the last sort key, so pages don't repeat or skip rows when many appointments share a date.
 
-**Page size is capped at 50** so one request can't ask for the whole table.
+**Page size is capped at 50, and the page number at 10,000,** so one request can't ask for the whole table or make the database skip an absurd number of rows.
+
+**What the indexes cover.** The default list (all appointments, newest first) matches the `{date, slotStart, _id}` index exactly, so it needs no in-memory sorting. Lists narrowed by doctor, department, status or patient use the index for that filter and then sort the (much smaller) filtered set in memory, and sorting by status or creation time has no index at all. That is fine for one clinic's data. At millions of appointments the next step would be indexes that pair each common filter with the sort, or a search service, as described in the scaling notes.
+
+**Counting.** The total is an exact count when filters are applied. With no filters it uses the collection's own estimate, which is instant instead of a scan.
 
 **Dates are compared as strings.** Appointment dates are stored as `YYYY-MM-DD`, which sort and compare correctly, so the date range filter uses the date index directly.
 

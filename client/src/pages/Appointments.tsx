@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router";
 import type { Appointment } from "../api/appointments";
 import { useAuth } from "../auth/AuthContext";
 import { AppointmentEditor } from "../components/AppointmentEditor";
+import { AppointmentRow } from "../components/AppointmentRow";
 import { Button } from "../components/Button";
 import { ErrorAlert } from "../components/ErrorAlert";
 import { Input } from "../components/Input";
@@ -10,12 +11,10 @@ import { Modal } from "../components/Modal";
 import { Pagination } from "../components/Pagination";
 import { Select } from "../components/Select";
 import { Spinner } from "../components/Spinner";
-import { StatusBadge, statusLabels } from "../components/StatusBadge";
-import { formatDate } from "../format";
+import { statusLabels } from "../components/StatusBadge";
 import { useAppointmentActions } from "../hooks/useAppointmentActions";
-import { useAppointments, useDepartments } from "../hooks/queries";
+import { useAppointments, useDepartments, useSummary } from "../hooks/queries";
 
-const today = () => new Date().toLocaleDateString("en-CA");
 const filterNames = ["patient", "mobile", "doctor", "departmentId", "status", "from", "to"] as const;
 
 export default function Appointments() {
@@ -25,8 +24,11 @@ export default function Appointments() {
   const departments = useDepartments();
   const appointments = useAppointments(params.toString());
   const actions = useAppointmentActions();
+  const today = useSummary().data?.date; // the clinic's date, which decides when a patient can be marked as arrived
   const [editing, setEditing] = useState<Appointment | null>(null);
-  const [confirmingCancel, setConfirmingCancel] = useState<string | null>(null);
+
+  const sortColumn = params.get("sortBy") ?? "date";
+  const sortOrder = params.get("order") ?? "desc";
 
   // The filters, sort and page all live in the URL, so a filtered list can be bookmarked or shared.
   const applyFilters = (form: FormData) => {
@@ -41,9 +43,8 @@ export default function Appointments() {
 
   const sortBy = (column: "date" | "status") => {
     const next = new URLSearchParams(params);
-    const sameColumn = (params.get("sortBy") ?? "date") === column;
     next.set("sortBy", column);
-    next.set("order", sameColumn && (params.get("order") ?? "desc") === "desc" ? "asc" : "desc");
+    next.set("order", sortColumn === column && sortOrder === "desc" ? "asc" : "desc");
     next.delete("page");
     setParams(next);
   };
@@ -55,18 +56,14 @@ export default function Appointments() {
       return next;
     });
 
-  const arrow = (column: string) => ((params.get("sortBy") ?? "date") === column ? ((params.get("order") ?? "desc") === "desc" ? " ▼" : " ▲") : "");
-  const departmentName = (id: string) => departments.data?.find((d) => d.id === id)?.name ?? "";
-  const run = (action: "arrive" | "cancel" | "complete", id: string) => {
-    setConfirmingCancel(null);
-    actions.mutate({ action, id });
-  };
+  const ariaSort = (column: string) => (sortColumn === column ? (sortOrder === "desc" ? "descending" : "ascending") : undefined);
+  const arrow = (column: string) => (sortColumn === column ? (sortOrder === "desc" ? " ▼" : " ▲") : "");
 
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold">Appointments</h1>
 
-      {/* Remounted when the URL's filters change (for example from a link), so the inputs show what is applied. */}
+      {/* Remounted when the filters in the URL change (for example from a link), so the inputs show what is applied. */}
       <form
         key={filterNames.map((name) => params.get(name)).join("|")}
         onSubmit={(e) => {
@@ -116,7 +113,7 @@ export default function Appointments() {
           <table className="min-w-full text-left text-sm">
             <thead className="border-b border-gray-200 bg-gray-50 text-gray-600">
               <tr>
-                <th className="px-3 py-2 font-medium">
+                <th aria-sort={ariaSort("date")} className="px-3 py-2 font-medium">
                   <button type="button" onClick={() => sortBy("date")}>
                     Date and time{arrow("date")}
                   </button>
@@ -124,7 +121,7 @@ export default function Appointments() {
                 <th className="px-3 py-2 font-medium">Patient</th>
                 {!isDoctor && <th className="px-3 py-2 font-medium">Doctor</th>}
                 <th className="px-3 py-2 font-medium">Purpose</th>
-                <th className="px-3 py-2 font-medium">
+                <th aria-sort={ariaSort("status")} className="px-3 py-2 font-medium">
                   <button type="button" onClick={() => sortBy("status")}>
                     Status{arrow("status")}
                   </button>
@@ -133,75 +130,18 @@ export default function Appointments() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {appointments.data.items.map((a) => {
-                const frontDesk = !isDoctor;
-                const canEdit = frontDesk ? a.status === "SCHEDULED" || a.status === "ARRIVED" : a.status === "ARRIVED" || a.status === "COMPLETED";
-                return (
-                  <tr key={a.id} className="align-top">
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {formatDate(a.date)}
-                      <br />
-                      <span className="text-gray-500">
-                        {a.slotStart}–{a.slotEnd}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="font-medium">{a.patient.name}</span>
-                      <br />
-                      <span className="text-gray-500">
-                        {a.patient.patientCode} · {a.patient.mobile}
-                      </span>
-                    </td>
-                    {!isDoctor && (
-                      <td className="px-3 py-2">
-                        {a.doctor.name}
-                        <br />
-                        <span className="text-gray-500">{departmentName(a.departmentId)}</span>
-                      </td>
-                    )}
-                    <td className="px-3 py-2">{a.purpose}</td>
-                    <td className="px-3 py-2">
-                      <StatusBadge status={a.status} />
-                    </td>
-                    <td className="px-3 py-2">
-                      {confirmingCancel === a.id ? (
-                        <span className="flex items-center gap-2 whitespace-nowrap">
-                          Cancel this appointment?
-                          <Button className="px-2 py-1 text-xs" onClick={() => run("cancel", a.id)}>
-                            Yes, cancel
-                          </Button>
-                          <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => setConfirmingCancel(null)}>
-                            Keep
-                          </Button>
-                        </span>
-                      ) : (
-                        <span className="flex flex-wrap gap-2">
-                          {frontDesk && a.status === "SCHEDULED" && a.date === today() && (
-                            <Button className="px-2 py-1 text-xs" disabled={actions.isPending} onClick={() => run("arrive", a.id)}>
-                              Mark arrived
-                            </Button>
-                          )}
-                          {isDoctor && a.status === "ARRIVED" && (
-                            <Button className="px-2 py-1 text-xs" disabled={actions.isPending} onClick={() => run("complete", a.id)}>
-                              Complete
-                            </Button>
-                          )}
-                          {canEdit && (
-                            <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => setEditing(a)}>
-                              {isDoctor ? "Notes" : "Edit"}
-                            </Button>
-                          )}
-                          {frontDesk && a.status === "SCHEDULED" && (
-                            <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => setConfirmingCancel(a.id)}>
-                              Cancel
-                            </Button>
-                          )}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+              {appointments.data.items.map((appointment) => (
+                <AppointmentRow
+                  key={appointment.id}
+                  appointment={appointment}
+                  isDoctor={!!isDoctor}
+                  departmentName={departments.data?.find((d) => d.id === appointment.departmentId)?.name ?? ""}
+                  busy={actions.isPending}
+                  today={today}
+                  onAction={(action, id) => actions.mutate({ action, id })}
+                  onEdit={setEditing}
+                />
+              ))}
             </tbody>
           </table>
         </div>

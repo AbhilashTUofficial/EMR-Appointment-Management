@@ -7,7 +7,7 @@ import { escapeRegex } from "../utils/mongo";
 import type { NewPatientInput } from "../validators/patient";
 import { logAudit } from "./auditService";
 
-type PatientFields = {
+export type PatientFields = {
   _id: Types.ObjectId;
   patientCode: string;
   name: string;

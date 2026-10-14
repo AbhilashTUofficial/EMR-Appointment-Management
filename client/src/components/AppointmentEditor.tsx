@@ -12,7 +12,7 @@ import { Input } from "./Input";
 import { Textarea } from "./Textarea";
 
 const schema = z.object({
-  purpose: z.string().trim().max(500),
+  purpose: z.string().trim().min(1, "Enter the purpose of the visit").max(500),
   notes: z.string().trim().max(1000),
   consultationNotes: z.string().trim().max(5000),
 });
@@ -41,7 +41,6 @@ export function AppointmentEditor({ appointment, role, onDone }: Props) {
 
   const submit = handleSubmit(async (values) => {
     setServerError("");
-    if (!isDoctor && !values.purpose) return setError("purpose", { message: "Enter the purpose of the visit" });
 
     try {
       await updateAppointment(appointment.id, isDoctor ? { consultationNotes: values.consultationNotes } : { purpose: values.purpose, notes: values.notes });
