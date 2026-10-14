@@ -74,7 +74,6 @@ async function seed() {
       role: "DOCTOR" as const,
       doctorProfile: {
         departmentId: departmentIds[department],
-        specialization: department,
         slotDurationMinutes,
         workingDays,
       },
