@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { sendSuccess } from "../utils/response";
+import { appointmentRoutes } from "./appointments";
 import { authRoutes } from "./auth";
 import { departmentRoutes } from "./departments";
 import { doctorRoutes } from "./doctors";
+import { patientRoutes } from "./patients";
 import { receptionistRoutes } from "./receptionists";
 import { slotRoutes } from "./slots";
 
@@ -15,5 +17,7 @@ routes.get("/health", (_req, res) => {
 routes.use("/auth", authRoutes);
 routes.use("/departments", departmentRoutes);
 routes.use("/doctors", doctorRoutes);
+routes.use("/patients", patientRoutes);
+routes.use("/appointments", appointmentRoutes);
 routes.use("/receptionists", receptionistRoutes);
 routes.use("/slots", slotRoutes);

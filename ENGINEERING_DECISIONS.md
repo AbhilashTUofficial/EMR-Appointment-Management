@@ -119,3 +119,28 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 **One query for bookings.** Bookings for the day come from a single lookup on doctor, date and active appointments, which matches the unique slot index. A booked slot shows as booked even after its time has passed, so the history of the day stays visible.
 
 **Known limit.** If a schedule is edited after appointments exist, those appointments stay in the database and appear in the appointment list, but the scheduler only draws slots the current schedule generates, so an appointment on a slot that no longer exists isn't shown in the grid.
+
+## Preventing double booking
+
+**The database enforces it, not the application.** Appointments have a unique index on doctor, date and slot start, limited to documents where `isActive` is true. If two requests try to book the same slot at the same moment, both inserts reach MongoDB and exactly one succeeds. The other gets a duplicate-key error, which the service turns into `409 SLOT_ALREADY_BOOKED`. Nothing in the application has to be correct about timing for this to hold.
+
+**Why not "check, then insert".** Two requests can both check, both see the slot free, and both insert. The check only narrows the window. The service still does one before inserting, but only so most late requests fail early and cheaply, before a patient record is created for them. A comment in the code says the index is the real guard. Removing the check doesn't change the outcome: the concurrency test below passes without it, because the index alone decides the winner.
+
+**Cancelled appointments free the slot.** A cancelled appointment is kept for the record but has `isActive: false`, so it drops out of the index and the slot can be booked again. This is why the index is partial and why `isActive` exists at all.
+
+**No transactions.** The one rule that has to be atomic, one active appointment per doctor slot, lives in a single document and a unique index, so a plain insert is enough. Transactions would also require a replica set for every local setup.
+
+**New patient plus appointment is two writes.** A new patient is created before the appointment so the appointment has something to point to. If the appointment insert then loses the race, the service deletes the patient it just created, so losing requests don't leave stray records. A test fires 12 simultaneous bookings of one slot with new patients and checks that exactly one appointment and one patient remain. If the process died between the two writes, the only leftover would be an unused patient record, which is harmless.
+
+**The server decides what a valid slot is.** The client sends only a start time. The server rebuilds the doctor's slots for that date and rejects anything that isn't one of them (a break, a time off the grid, outside working hours, a non-working day) and anything that has already started. So a request made directly to the API can't book what the scheduler wouldn't offer.
+
+## Patients
+
+**Patient IDs come from an atomic counter.** `PT-000001`, `PT-000002`, … are generated with a single `$inc` on a counter document, so two patients registered at once never get the same ID. An ID is not reused if a patient is deleted after losing a booking race.
+
+**Search is a prefix match.** A search term matches patient IDs exactly, the start of a mobile number, or the start of a name (case-insensitive). The prefix matches use the indexes on those fields. The cost is that a name search starts at the beginning of the full name, so "nair" won't find "Asha Nair". For the clinic sizes this module targets that is acceptable. A search index over words would be the next step, covered in the scaling notes.
+
+**Mobile numbers are stored without spaces or dashes** and aren't unique, since family members often share one number.
+
+**The search term is treated literally.** It is escaped before being used in a pattern, so characters like `.*` can't turn a search into a broad regular expression.
+

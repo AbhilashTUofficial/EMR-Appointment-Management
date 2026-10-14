@@ -25,7 +25,7 @@ client/
   src/
     api/           fetch wrapper (token handling, refresh) and API calls
     auth/          auth context, route guard
-    components/    shared UI: layout, form fields, button, spinner, staff form, slot grid
+    components/    shared UI: layout, form fields, button, spinner, staff form, slot grid, patient picker
     hooks/         shared data queries
     forms.ts       shows server validation errors on form fields
     pages/         one file per screen (admin screens in pages/admin)
@@ -115,6 +115,29 @@ Slots are worked out from the doctor's schedule each time and are not stored. Th
 A slot is `BOOKED` if an active appointment holds it, `PAST` if it has already started (or the date is before today), otherwise `AVAILABLE`. On a day the doctor doesn't work, `isWorkingDay` is false and the lists are empty. Errors: `400` bad or missing parameters, `404` unknown doctor (or another doctor's schedule when signed in as a doctor).
 
 The scheduler screen shows this as a grid, with the filters (department, doctor, date) kept in the URL.
+
+## Patients and booking
+
+| Method | Path | Who | Notes |
+|---|---|---|---|
+| GET | `/patients?search=` | admin, receptionist | Up to 10 matches by patient ID (`PT-000042`), start of a mobile number, or start of a name |
+| POST | `/appointments` | admin, receptionist | Books a slot |
+
+Booking body:
+
+```json
+{
+  "doctorId": "…", "date": "2026-10-19", "slotStart": "10:00",
+  "purpose": "Fever for three days", "notes": "optional",
+  "newPatient": { "name": "Asha Nair", "mobile": "98765 43210", "gender": "FEMALE", "dateOfBirth": "1990-05-01" }
+}
+```
+
+For a patient who is already registered, send `"patientId": "…"` instead of `newPatient`. Send exactly one of the two. A new patient is registered with the next patient ID. The appointment is linked to the patient, the doctor, the doctor's department and the slot.
+
+Errors: `400` for invalid input, a time that isn't one of the doctor's slots (`SLOT_NOT_AVAILABLE`, which covers breaks and times off the slot grid) or a slot in the past (`SLOT_IN_PAST`); `404` for an unknown doctor or patient; `409` `SLOT_ALREADY_BOOKED` when someone else got the slot first.
+
+In the app, clicking an available slot in the scheduler opens the booking page, where the receptionist either searches for an existing patient or enters a new one.
 
 Other: `GET /api/v1/health`.
 

@@ -1,6 +1,7 @@
 import { Navigate, createBrowserRouter } from "react-router";
 import { RequireAuth } from "./auth/RequireAuth";
 import { AppLayout } from "./components/AppLayout";
+import Book from "./pages/Book";
 import Dashboard from "./pages/Dashboard";
 import ErrorPage from "./pages/ErrorPage";
 import Login from "./pages/Login";
@@ -20,6 +21,10 @@ export const router = createBrowserRouter([
         children: [
           { path: "/", element: <Dashboard /> },
           { path: "/scheduler", element: <Scheduler /> },
+          {
+            element: <RequireAuth roles={["SUPER_ADMIN", "RECEPTIONIST"]} />,
+            children: [{ path: "/book", element: <Book /> }],
+          },
           {
             element: <RequireAuth roles={["SUPER_ADMIN"]} />,
             children: [
