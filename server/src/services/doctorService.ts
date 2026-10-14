@@ -25,7 +25,7 @@ const toDoctor = (user: DoctorUser) => {
 // Doctors only ever see themselves.
 export async function listDoctors(viewer: { id: string; role: Role }, departmentId?: string) {
   const filter = viewer.role === "DOCTOR" ? { _id: viewer.id } : departmentId ? { "doctorProfile.departmentId": departmentId } : {};
-  const doctors = await User.find({ role: "DOCTOR", ...filter }).sort("name").lean();
+  const doctors = await User.find({ role: "DOCTOR", isActive: true, ...filter }).sort("name").lean();
   return doctors.map(toDoctor);
 }
 

@@ -1,5 +1,6 @@
 import { memo } from "react";
-import type { BreakRange, DaySlots, Slot } from "../api/slots";
+import type { TimeRange } from "../api/doctors";
+import type { DaySlots, Slot } from "../api/slots";
 
 const slotStyles: Record<Slot["status"], string> = {
   AVAILABLE: "border-green-300 bg-green-50 text-green-800",
@@ -61,7 +62,7 @@ export function SlotGrid({ data, onSelect }: Props) {
   );
 }
 
-function BreakStrip({ range }: { range: BreakRange }) {
+function BreakStrip({ range }: { range: TimeRange }) {
   return (
     <p className="rounded-md bg-gray-100 px-3 py-1.5 text-center text-sm text-gray-500">
       {range.name || "Break"} · {range.start}–{range.end}

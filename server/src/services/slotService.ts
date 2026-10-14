@@ -1,3 +1,4 @@
+import type { Types } from "mongoose";
 import { env } from "../config/env";
 import { Appointment } from "../models/appointment";
 import { User } from "../models/user";
@@ -30,13 +31,12 @@ export function generateSchedule(profile: Profile, date: string) {
 }
 
 type Now = ReturnType<typeof clinicNow>;
-type Booking = { slotStart: string; _id: unknown };
-type Slot = { start: string; end: string; status: "AVAILABLE" | "BOOKED" | "PAST"; appointmentId?: unknown };
+type Booking = { slotStart: string; _id: Types.ObjectId };
+type Slot = { start: string; end: string; status: "AVAILABLE" | "BOOKED" | "PAST"; appointmentId?: Types.ObjectId };
 type DaySlots = {
   isWorkingDay: boolean;
   sessions: { name?: string | null; start: string; end: string; slots: Slot[] }[];
   breaks: Range[];
-  today: string;
 };
 
 export async function getSlots(doctorId: string, date: string, now: Now = clinicNow(env.CLINIC_TIMEZONE)): Promise<DaySlots> {
@@ -44,7 +44,7 @@ export async function getSlots(doctorId: string, date: string, now: Now = clinic
   if (!doctor?.doctorProfile) throw new AppError(404, "DOCTOR_NOT_FOUND", "Doctor not found");
 
   const schedule = generateSchedule(doctor.doctorProfile, date);
-  if (!schedule.isWorkingDay) return { isWorkingDay: false, sessions: [], breaks: [], today: now.date };
+  if (!schedule.isWorkingDay) return { isWorkingDay: false, sessions: [], breaks: [] };
 
   // Same filter as the unique slot index, so this is an index lookup.
   const booked: Booking[] = await Appointment.find({ doctorId, date, isActive: true }).select("slotStart").lean();
@@ -60,5 +60,5 @@ export async function getSlots(doctorId: string, date: string, now: Now = clinic
     }),
   }));
 
-  return { ...schedule, sessions, today: now.date };
+  return { ...schedule, sessions };
 }

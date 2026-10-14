@@ -18,8 +18,10 @@ export default function Scheduler() {
 
   const departments = useDepartments();
   const doctors = useDoctors(department || undefined);
-  // A doctor only ever sees their own schedule, so there is nothing to choose.
-  const doctorId = user?.role === "DOCTOR" ? doctors.data?.[0]?.id : params.get("doctor") || undefined;
+  // A doctor only ever sees their own schedule, so there is nothing to choose. For everyone else the
+  // doctor in the URL only counts while it is one of the listed doctors, so a stale link shows no slots.
+  const chosen = params.get("doctor");
+  const doctorId = user?.role === "DOCTOR" ? user.id : doctors.data?.find((d) => d.id === chosen)?.id;
   const slots = useSlots(doctorId, date);
 
   const setFilter = (changes: Record<string, string>) =>
@@ -58,7 +60,7 @@ export default function Scheduler() {
       </div>
 
       {!doctorId && <p className="text-sm text-gray-600">Choose a doctor to see their slots.</p>}
-      {slots.isFetching && !slots.data && <Spinner className="py-10" />}
+      {slots.isLoading && <Spinner className="py-10" />}
       {slots.isError && <ErrorAlert>{slots.error.message}</ErrorAlert>}
       {slots.data && !slots.data.isWorkingDay && <p className="text-sm text-gray-600">The doctor does not work on this day.</p>}
       {slots.data?.isWorkingDay && (

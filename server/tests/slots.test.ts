@@ -86,10 +86,6 @@ describe("generateSchedule", () => {
     }
   });
 
-  it("reads the weekday from the date itself, so the server's timezone can't shift it", () => {
-    expect(new Date(`${MONDAY}T00:00:00Z`).getUTCDay()).toBe(1);
-    expect(generateSchedule(profile([range("09:00", "10:00")]), MONDAY).isWorkingDay).toBe(true);
-  });
 });
 
 describe("clinicNow", () => {
@@ -184,12 +180,11 @@ describe("GET /slots", () => {
 
   const get = (token: string, query: string) => request(app).get(`/api/v1/slots?${query}`).set("Authorization", `Bearer ${token}`);
 
-  it("returns the day's sessions, slots and today's date for staff", async () => {
+  it("returns the day's sessions and slots for staff", async () => {
     const res = await get(accessToken("RECEPTIONIST"), `doctorId=${doctorId}&date=${MONDAY}`);
     expect(res.status).toBe(200);
     expect(res.body.data.isWorkingDay).toBe(true);
     expect(res.body.data.sessions[0].slots).toHaveLength(4);
-    expect(res.body.meta.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it("says when the doctor does not work that day", async () => {

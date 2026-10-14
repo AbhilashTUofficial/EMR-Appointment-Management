@@ -114,7 +114,7 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 
 **Past slots use the clinic's clock.** Dates and times are wall-clock values in one timezone (`CLINIC_TIMEZONE`, default Asia/Kolkata), so "is this slot in the past" compares the slot with the current date and time in that zone, worked out with `Intl.DateTimeFormat` and no date library. A slot counts as past once it has started. The function takes "now" as a parameter so the tests can fix the time.
 
-**The server decides, the screen only shows.** The status of each slot comes from the API. The client has no clock or timezone logic of its own, so it can't disagree with what the booking endpoint will accept.
+**The server decides, the screen only shows.** The status of each slot comes from the API. The client has no logic for deciding what is in the past, so it can't disagree with what the booking endpoint will accept. The only date it works out itself is the initial value of the date picker, taken from the browser's date.
 
 **One query for bookings.** Bookings for the day come from a single lookup on doctor, date and active appointments, which matches the unique slot index. A booked slot shows as booked even after its time has passed, so the history of the day stays visible.
 

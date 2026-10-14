@@ -112,7 +112,7 @@ Slots are worked out from the doctor's schedule each time and are not stored. Th
 }
 ```
 
-`meta.today` is today's date on the clinic's clock. A slot is `BOOKED` if an active appointment holds it, `PAST` if it has already started (or the date is before today), otherwise `AVAILABLE`. On a day the doctor doesn't work, `isWorkingDay` is false and the lists are empty. Errors: `400` bad or missing parameters, `404` unknown doctor (or another doctor's schedule when signed in as a doctor).
+A slot is `BOOKED` if an active appointment holds it, `PAST` if it has already started (or the date is before today), otherwise `AVAILABLE`. On a day the doctor doesn't work, `isWorkingDay` is false and the lists are empty. Errors: `400` bad or missing parameters, `404` unknown doctor (or another doctor's schedule when signed in as a doctor).
 
 The scheduler screen shows this as a grid, with the filters (department, doctor, date) kept in the URL.
 

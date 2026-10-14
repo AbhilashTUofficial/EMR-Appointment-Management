@@ -10,6 +10,5 @@ export const getSlotsHandler: RequestHandler = async (req, res) => {
   // A doctor can only look at their own schedule; the same answer as for a missing doctor avoids confirming who exists.
   if (req.user!.role === "DOCTOR" && req.user!.id !== doctorId) throw new AppError(404, "DOCTOR_NOT_FOUND", "Doctor not found");
 
-  const { today, ...schedule } = await getSlots(doctorId, date);
-  sendSuccess(res, schedule, "OK", 200, { today });
+  sendSuccess(res, await getSlots(doctorId, date));
 };
