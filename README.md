@@ -2,6 +2,8 @@
 
 An appointment management module for an electronic medical record (EMR) system, built with the MERN stack and TypeScript.
 
+## Project overview
+
 Receptionists book appointments from a live scheduler, doctors work through their own list and add consultation notes, and the admin sets up doctors, receptionists and weekly schedules. Slots are generated from each doctor's schedule, double booking is prevented by the database, and every open screen updates as soon as someone else changes an appointment.
 
 The reasoning behind the main decisions is in [ENGINEERING_DECISIONS.md](ENGINEERING_DECISIONS.md). The application is not hosted; run it locally as described below.
@@ -66,7 +68,7 @@ Browser (React) ── HTTP /api/v1 ──▶ route ─▶ middleware ─▶ con
 
 ## Installation
 
-Requires Node 22 or newer (developed on Node 24) and a MongoDB database (a local one, or an Atlas connection string).
+Requires Node 22.9 or newer (developed on Node 24) and a MongoDB database (a local one, or an Atlas connection string).
 
 ```bash
 npm install
@@ -99,7 +101,7 @@ Seeded logins all use `SEED_PASSWORD`:
 | `npm run typecheck` | `tsc --noEmit` for both packages |
 | `npm test` | All server tests, using an in-memory MongoDB (the first run downloads a mongod binary) |
 | `npm run build` | Builds the server (`server/dist`) and the client (`client/dist`) |
-| `npm start -w server` | Runs the built server (use `NODE_ENV=production` and a real `CLIENT_ORIGIN`) |
+| `npm start -w server` | Runs the built server, reading `server/.env` if it exists (in production set `NODE_ENV=production` and a real `CLIENT_ORIGIN`) |
 
 ### Docker (optional)
 
@@ -190,7 +192,7 @@ auditlogs, counters (standalone)
 | `refreshtokens` | `tokenHash` unique, `userId`, `expiresAt` (expires itself) | Token lookup, revoking a user's tokens, cleanup |
 | `auditlogs` | `{createdAt}`, `{entityType, entityId, createdAt}` | Recent activity, one record's history |
 
-**Query strategy:** list queries run one filtered, sorted, paged query plus a count; the patient and doctor for a page are loaded with one lookup each, never one per row; search terms are anchored prefixes so they can use the indexes; slots are calculated rather than stored, with one indexed lookup for the day's bookings.
+**Query strategy:** list queries run one filtered, sorted, paged query plus a count; the patient and doctor for a page are loaded with one lookup each, never one per row; patient searches are anchored prefixes so they can use the indexes (doctor-name search is a case-insensitive match over the small set of doctors); slots are calculated rather than stored, with one indexed lookup for the day's bookings.
 
 ## API documentation
 
@@ -341,10 +343,10 @@ Logins (successful and failed), logouts, user creation, schedule changes, patien
 
 ## Known limitations
 
-- An access token is not re-checked against the database, so a deactivated user keeps access for up to 15 minutes. A live connection stays authorized until it drops.
+- An access token is not re-checked against the database, so a deactivated user keeps access, and a signed-out user's access token keeps working, until it expires (at most 15 minutes). A live connection stays authorized until it drops.
 - If a doctor's schedule is edited after appointments exist, those appointments stay in the list but are not drawn in the scheduler when their slot no longer exists.
 - Lists narrowed by doctor, department, status or patient are sorted in memory over the filtered rows, and sorting by status or creation time has no index. This is fine for one clinic.
-- Only login is rate limited.
+- Only login is rate limited, and the main JavaScript bundle (about 540 kB, mostly libraries) is not split further.
 - The audit log is written but there is no screen or endpoint to read it.
 - Opening the app in two tabs at the same moment can sign both out, because both use the same single-use refresh token.
 - The client has no automated tests, and the Docker setup was not run in the environment this was built in.

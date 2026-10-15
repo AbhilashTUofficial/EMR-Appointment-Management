@@ -18,13 +18,13 @@ The other sections explain the decisions behind individual features.
 
 **Modular monolith, two packages in one repo.** `server/` is a single Express app, `client/` is a single React app, joined by npm workspaces so one `npm install` and one CI run cover both. No microservices or shared packages: there is one team, one deployable API, and nothing that needs to scale independently.
 
-**Server layering: route → controller → service → model** (each layer is added when the first feature needs it). Routes only declare the URL and middleware chain. Controllers read the request and call one service. Services hold the business rules (slot validation, status transitions, booking). Models define the schemas and indexes. This keeps controllers thin and puts everything worth testing in one place. There is no repository layer: services call Mongoose directly, because a second layer over Mongoose would only forward calls.
+**Server layering: route → controller → service → model** . Routes only declare the URL and middleware chain. Controllers read the request and call one service. Services hold the business rules (slot validation, status transitions, booking). Models define the schemas and indexes. This keeps controllers thin and puts everything worth testing in one place. There is no repository layer: services call Mongoose directly, because a second layer over Mongoose would only forward calls.
 
 **Express 5.** Rejected promises in async handlers reach the error handler on their own, so no wrapper is needed around every controller.
 
 **Centralised errors and responses.** Services throw `AppError(status, code, message)`. One error middleware turns that, Zod validation errors and unknown errors into the same envelope, and unknown errors never leak internals to the client. One `sendSuccess` helper builds the success envelope.
 
-**Config is validated at boot.** `config/env.ts` parses `process.env` with Zod, so a wrong variable stops the server at startup instead of failing on the first request that needs it. Variables with no safe default (database URI, JWT secrets) are required and are added as the features that use them arrive. Node's `--env-file` flag loads `.env`, so there is no dotenv dependency.
+**Config is validated at boot.** `config/env.ts` parses `process.env` with Zod, so a wrong variable stops the server at startup instead of failing on the first request that needs it. Variables with no safe default (database URI, JWT secrets) are required and come with the features that use them. Node's `--env-file` flag loads `.env`, so there is no dotenv dependency.
 
 **Client state.** TanStack Query owns server data (caching, loading and error states, pagination, refetch on live updates). React state and the URL cover everything else. There is no global store.
 
@@ -56,7 +56,7 @@ Each index is there for a query the screens will run:
 - `patients.patientCode` (unique), `patients.mobile`, `patients.nameLower`: the three ways receptionists look a patient up.
 - `appointments {doctorId, date, slotStart}` (unique, partial on `isActive: true`): prevents double booking and doubles as the lookup of one doctor's bookings on a date. Cancelled appointments are left out, so the index stays small and a cancelled slot can be booked again.
 - `appointments {doctorId, date, status}`: a doctor's own list, including cancelled, and status filters.
-- `appointments {date, slotStart}`: date-range lists across doctors and the default sort.
+- `appointments {date, slotStart, _id}`: date-range lists across doctors and the default sort. It ends in `_id`, the last sort key, so the default list needs no in-memory sorting.
 - `appointments {departmentId, date}`: department filter.
 - `appointments {patientId, date desc}`: looking up a patient's appointments.
 - `refreshtokens.tokenHash` (unique): token lookup. `refreshtokens.userId`: revoke all of a user's tokens in one query. `refreshtokens.expiresAt` (TTL): MongoDB deletes expired tokens by itself.
@@ -108,7 +108,7 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 
 **One schedule per doctor, replaced as a whole.** `PUT /doctors/:id/schedule` takes the complete schedule instead of per-day or per-session endpoints. The editor always shows the whole week, so a single request is simpler and keeps the stored schedule consistent: it is either the old one or the new one, never half of each.
 
-**Schedule rules are checked on the server.** The slot generator in the next step relies on well-formed input, so bad schedules are rejected up front: end before start, overlapping sessions or breaks, a repeated day, and slot lengths outside 5-120 minutes. The client doesn't repeat these rules; it shows the server's messages in plain language, and only offers slot lengths from a fixed list.
+**Schedule rules are checked on the server.** The slot generator relies on well-formed input, so bad schedules are rejected up front: end before start, overlapping sessions or breaks, a repeated day, and slot lengths outside 5-120 minutes. The client doesn't repeat these rules; it shows the server's messages in plain language, and only offers slot lengths from a fixed list.
 
 **A break can sit inside a session or in the gap between two.** The assessment's example (09:00-12:00, lunch 12:00-13:00, 13:00-17:00) is the gap case, but a tea break inside a session works the same way, so breaks are stored per day next to sessions.
 
@@ -196,7 +196,7 @@ The summary is one aggregation over today's appointments (by clinic date, for a 
 
 ## Keeping the screen in step
 
-After arrive, cancel or complete, the client refetches the appointment lists, the scheduler's slots and the dashboard counts, so every screen shows the same thing. Live updates for other users' changes are added in the real-time step.
+After arrive, cancel or complete, the client refetches the appointment lists, the scheduler's slots and the dashboard counts, so every screen shows the same thing. Changes made by other users arrive through the live updates described in the next section.
 
 ## Real-time updates
 
@@ -246,7 +246,7 @@ Each optimization and why it was needed.
 - **Server-side paging with a cap.** A page is at most 50 rows and at most page 10,000, so response size and the work the database does are bounded whatever a client asks for.
 - **Fixed number of queries per page.** A list is one query, one count, and one lookup each for the patients and doctors on that page, instead of a lookup per row.
 - **Count and page run together,** so the total costs no extra waiting. An unfiltered total uses the collection's own estimate instead of a scan.
-- **Lean reads with only the needed fields.** Reads return plain objects, not full Mongoose documents, and responses carry only the fields a screen uses.
+- **Lean reads.** Reads return plain objects instead of full Mongoose documents, the patient lookup for a page selects only the fields a row shows, and responses are built field by field.
 - **Slots are calculated, not stored.** There is nothing to regenerate when a schedule changes and no stale rows. A day costs one indexed lookup for its bookings.
 - **Prefix searches** on patient names, mobile numbers and patient IDs use their indexes. The search text is anchored at the start so the index can be used.
 - **One aggregation for the dashboard,** bounded to a single day, instead of loading appointments and counting in the application.
@@ -259,7 +259,7 @@ Each optimization and why it was needed.
 - **Targeted invalidation.** After a change, only the slots, appointment and dashboard queries are refetched, and only the ones on screen.
 - **Debounced patient search,** so typing doesn't send a request per key.
 - **`React.memo` on slot buttons,** with a stable click handler. A refetch returns the same slot objects for slots that didn't change, so only the changed ones re-render. This is the one place with enough repeated small elements to benefit; memoization is not used elsewhere.
-- **Admin screens load on demand.** The doctor, schedule and receptionist pages are separate chunks that only admins download.
+- **Admin screens load on demand.** The doctor, schedule and receptionist pages are separate chunks that only admins download. They are small (about 9 kB), so the gain is modest; the main bundle (about 540 kB, mostly libraries) is the bigger target and has not been split.
 - **Filters in the URL** and an uncontrolled filter form, so typing in a filter field re-renders nothing until Apply.
 
 ## Scaling to millions of appointments
