@@ -8,14 +8,16 @@ import { SlotGrid, SlotLegend } from "../components/SlotGrid";
 import { Spinner } from "../components/Spinner";
 import { useAuth } from "../auth/AuthContext";
 import { today } from "../format";
-import { useDepartments, useDoctors, useSlots } from "../hooks/queries";
+import { useDepartments, useDoctors, useSlots, useSummary } from "../hooks/queries";
 
 export default function Scheduler() {
   const { user } = useAuth();
   // The filters live in the URL, so a scheduler view can be bookmarked or shared.
   const [params, setParams] = useSearchParams();
   const department = params.get("department") ?? "";
-  const date = params.get("date") ?? today();
+  // The default is the clinic's date from the server, which can differ from the browser's.
+  const clinicToday = useSummary().data?.date;
+  const date = params.get("date") ?? clinicToday ?? today();
 
   const departments = useDepartments();
   const doctors = useDoctors(department || undefined);
@@ -65,10 +67,12 @@ export default function Scheduler() {
             </Select>
           </>
         )}
-        <Input label="Date" type="date" value={date} onChange={(e) => setFilter({ date: e.target.value })} />
+        <Input label="Date" type="date" value={date} onChange={(e) => e.target.value && setFilter({ date: e.target.value })} />
       </div>
 
-      {!doctorId && <p className="text-sm text-gray-600">Choose a doctor to see their slots.</p>}
+      {departments.isError && <ErrorAlert>{departments.error.message}</ErrorAlert>}
+      {doctors.isError && <ErrorAlert>{doctors.error.message}</ErrorAlert>}
+      {!doctorId && !doctors.isError && <p className="text-sm text-gray-600">Choose a doctor to see their slots.</p>}
       {slots.isLoading && <Spinner className="py-10" />}
       {slots.isError && <ErrorAlert>{slots.error.message}</ErrorAlert>}
       {slots.data && !slots.data.isWorkingDay && <p className="text-sm text-gray-600">The doctor does not work on this day.</p>}

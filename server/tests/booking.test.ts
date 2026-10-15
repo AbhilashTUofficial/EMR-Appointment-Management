@@ -7,20 +7,12 @@ import { AuditLog } from "../src/models/auditLog";
 import { Counter } from "../src/models/counter";
 import { Patient } from "../src/models/patient";
 import { User } from "../src/models/user";
-import { accessToken, useTestDb } from "./helpers";
+import { FUTURE, as, useTestDb } from "./helpers";
 
 useTestDb();
 
-const FUTURE = "2099-03-02";
 const PAST = "2000-03-06";
 
-const as = (role: string) => {
-  const auth = `Bearer ${accessToken(role)}`;
-  return {
-    get: (url: string) => request(app).get(url).set("Authorization", auth),
-    post: (url: string) => request(app).post(url).set("Authorization", auth),
-  };
-};
 const receptionist = as("RECEPTIONIST");
 
 const range = (start: string, end: string, name = "Morning") => ({ name, start, end });

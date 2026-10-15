@@ -1,7 +1,7 @@
 import { http } from "./http";
 import type { Patient } from "./patients";
 
-export type NewPatient = { name: string; mobile: string; gender: string; dateOfBirth?: string };
+type NewPatient = { name: string; mobile: string; gender: string; dateOfBirth?: string };
 
 export type NewAppointment = {
   doctorId: string;
@@ -30,7 +30,7 @@ export type Appointment = {
 };
 
 export type PageMeta = { page: number; limit: number; total: number; totalPages: number };
-export type Changes = { purpose?: string; notes?: string; consultationNotes?: string };
+type Changes = { purpose?: string; notes?: string; consultationNotes?: string };
 
 export const createAppointment = async (appointment: NewAppointment) =>
   (await http<Appointment>("/appointments", { method: "POST", body: JSON.stringify(appointment) })).data;
@@ -47,7 +47,7 @@ export const cancelAppointment = async (id: string) => (await http<Appointment>(
 export const arriveAppointment = async (id: string) => (await http<Appointment>(`/appointments/${id}/arrive`, { method: "POST" })).data;
 export const completeAppointment = async (id: string) => (await http<Appointment>(`/appointments/${id}/complete`, { method: "POST" })).data;
 
-export type Summary = {
+type Summary = {
   date: string;
   counts: Record<Status, number>;
   totals?: { doctors: number; patients: number }; // admin only

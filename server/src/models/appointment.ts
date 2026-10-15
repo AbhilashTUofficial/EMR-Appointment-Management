@@ -36,6 +36,8 @@ appointmentSchema.index(
 );
 appointmentSchema.index({ doctorId: 1, date: 1, status: 1 }); // doctor's own list, status filters
 appointmentSchema.index({ date: 1, slotStart: 1, _id: 1 }); // date-range list; matches the default sort, so it needs no in-memory sorting
+appointmentSchema.index({ status: 1, date: 1, slotStart: 1, _id: 1 }); // the list sorted by status
+appointmentSchema.index({ createdAt: 1, _id: 1 }); // the list sorted by when it was booked (either direction)
 appointmentSchema.index({ departmentId: 1, date: 1 });
 appointmentSchema.index({ patientId: 1, date: -1 });
 

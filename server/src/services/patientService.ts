@@ -1,11 +1,12 @@
 import type { Types } from "mongoose";
 import { Counter } from "../models/counter";
 import { Patient } from "../models/patient";
-import type { Role } from "../models/user";
+import type { AuthUser } from "../models/user";
 import { AppError } from "../utils/AppError";
-import { escapeRegex } from "../utils/mongo";
+import { escapeRegex, isDuplicateKeyError } from "../utils/mongo";
+import { nameWords } from "../utils/names";
 import type { NewPatientInput } from "../validators/patient";
-import { logAudit } from "./auditService";
+import { auditAction } from "./auditService";
 
 export type PatientFields = {
   _id: Types.ObjectId;
@@ -27,12 +28,12 @@ export const toPatient = (p: PatientFields) => ({
 
 // Matches a patient whose patient ID is the term, or in whose name every word of the term starts a word.
 // "das" finds "Rohan Das" and "rohan d" does too. The indexed word list keeps this an index lookup.
-export const nameOrCodeFilter = (term: string) => ({
-  $or: [
-    { $and: term.toLowerCase().split(/\s+/).filter(Boolean).map((word) => ({ nameTokens: { $regex: `^${escapeRegex(word)}` } })) },
-    { patientCode: term.toUpperCase() },
-  ],
-});
+export const nameOrCodeFilter = (term: string) => {
+  const byCode = { patientCode: term.toUpperCase() };
+  const words = nameWords(term);
+  if (!words.length) return byCode; // only punctuation, so there is no name to match
+  return { $or: [{ $and: words.map((word) => ({ nameTokens: { $regex: `^${escapeRegex(word)}` } })) }, byCode] };
+};
 
 // Matches the start of a mobile number, written with or without its country code, spaces or dashes.
 export const mobileFilter = (term: string) => {
@@ -50,12 +51,23 @@ export async function searchPatients(term: string) {
   return patients.map(toPatient);
 }
 
-export async function createPatient(input: NewPatientInput, actor: { id: string; role: Role }) {
-  // Atomic counter, so two patients registered at once never get the same code.
-  const counter = await Counter.findOneAndUpdate({ _id: "patient" }, { $inc: { seq: 1 } }, { upsert: true, returnDocument: "after" });
-  const patient = await Patient.create({ ...input, patientCode: `PT-${String(counter.seq).padStart(6, "0")}`, createdBy: actor.id });
+// Atomic counter, so two patients registered at once never get the same code.
+async function nextPatientCode() {
+  const bump = () => Counter.findOneAndUpdate({ _id: "patient" }, { $inc: { seq: 1 } }, { upsert: true, returnDocument: "after" });
+  let counter;
+  try {
+    counter = await bump();
+  } catch (err) {
+    // The very first two patients can both try to create the counter; the loser simply increments it.
+    if (!isDuplicateKeyError(err)) throw err;
+    counter = await bump();
+  }
+  return `PT-${String(counter.seq).padStart(6, "0")}`;
+}
 
-  await logAudit({ userId: actor.id, role: actor.role, action: "PATIENT_CREATED", entityType: "Patient", entityId: patient._id });
+export async function createPatient(input: NewPatientInput, actor: AuthUser) {
+  const patient = await Patient.create({ ...input, patientCode: await nextPatientCode(), createdBy: actor.id });
+  await auditAction(actor, "PATIENT_CREATED", "Patient", patient._id);
   return patient;
 }
 

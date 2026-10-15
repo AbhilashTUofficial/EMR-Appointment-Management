@@ -1,14 +1,15 @@
 import type { RequestHandler } from "express";
 import { changeStatus, createAppointment, getAppointment, listAppointments, updateAppointment } from "../services/appointmentService";
+import { parsedQuery } from "../middlewares/validate";
 import { sendSuccess } from "../utils/response";
-import { listAppointmentsSchema } from "../validators/appointment";
+import type { ListAppointmentsQuery } from "../validators/appointment";
 
 export const createAppointmentHandler: RequestHandler = async (req, res) => {
   sendSuccess(res, await createAppointment(req.body, req.user!), "Appointment created", 201);
 };
 
 export const listAppointmentsHandler: RequestHandler = async (req, res) => {
-  const { items, meta } = await listAppointments(listAppointmentsSchema.parse(req.query), req.user!);
+  const { items, meta } = await listAppointments(parsedQuery<ListAppointmentsQuery>(res), req.user!);
   sendSuccess(res, items, "OK", 200, meta);
 };
 

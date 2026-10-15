@@ -10,24 +10,29 @@ const tooMany = (req: Request, res: Parameters<typeof sendError>[0]) => {
   sendError(res, 429, "TOO_MANY_REQUESTS", `Too many failed sign-in attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`);
 };
 
-const shared = {
-  windowMs: 15 * 60 * 1000,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true, // only failed attempts count
-  skip: () => env.NODE_ENV === "test",
-  handler: tooMany,
-};
+// Tests build their own limiter that is switched on; the app's one is off under test so other suites can sign in freely.
+export function createLoginLimiter(skip: () => boolean = () => env.NODE_ENV === "test") {
+  const shared = {
+    windowMs: 15 * 60 * 1000,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipSuccessfulRequests: true, // only failed attempts count
+    skip,
+    handler: tooMany,
+  };
 
-// Failed attempts are counted per email from one address, so someone guessing one account's password
-// is stopped without locking out colleagues who share the office network...
-const perAccount = rateLimit({
-  ...shared,
-  limit: 10,
-  keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? "")}|${String(req.body?.email ?? "").toLowerCase()}`,
-});
+  // Failed attempts are counted per email from one address, so someone guessing one account's password
+  // is stopped without locking out colleagues who share the office network...
+  const perAccount = rateLimit({
+    ...shared,
+    limit: 10,
+    keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? "")}|${String(req.body?.email ?? "").trim().toLowerCase().slice(0, 254)}`, // same spelling the login validation uses
+  });
 
-// ...and per address overall, which stops one machine from trying many accounts.
-const perAddress = rateLimit({ ...shared, limit: 50 });
+  // ...and per address overall, which stops one machine from trying many accounts.
+  const perAddress = rateLimit({ ...shared, limit: 50 });
 
-export const loginLimiter = [perAddress, perAccount];
+  return [perAddress, perAccount];
+}
+
+export const loginLimiter = createLoginLimiter();

@@ -3,6 +3,12 @@
 services:
   mongo:
     image: mongo:8
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
     volumes:
       - mongo-data:/data/db
 
@@ -18,9 +24,11 @@ services:
       TRUST_PROXY: 1
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
-      SEED_PASSWORD: ${SEED_PASSWORD:-}
+      SEED_PASSWORD: ${SEED_PASSWORD:?set SEED_PASSWORD in .env}
+    restart: unless-stopped
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
 
   client:
     build:
@@ -28,6 +36,7 @@ services:
       dockerfile: client/Dockerfile
     ports:
       - "8080:80"
+    restart: unless-stopped
     depends_on:
       - server
 

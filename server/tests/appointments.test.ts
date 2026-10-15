@@ -2,29 +2,16 @@ import request from "supertest";
 import { Types } from "mongoose";
 import { beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/app";
-import { env } from "../src/config/env";
 import { Appointment, type AppointmentStatus } from "../src/models/appointment";
 import { AuditLog } from "../src/models/auditLog";
 import { Patient } from "../src/models/patient";
 import { User } from "../src/models/user";
 import { canTransition } from "../src/utils/appointmentStatus";
-import { clinicNow } from "../src/utils/time";
-import { accessToken, useTestDb } from "./helpers";
+import { FUTURE, as, today, useTestDb } from "./helpers";
 
 useTestDb();
 
-const TODAY = clinicNow(env.CLINIC_TIMEZONE).date;
-const FUTURE = "2099-03-02";
 
-const as = (role: string, id?: string) => {
-  const auth = `Bearer ${accessToken(role, id)}`;
-  return {
-    get: (url: string) => request(app).get(url).set("Authorization", auth),
-    post: (url: string) => request(app).post(url).set("Authorization", auth),
-    put: (url: string) => request(app).put(url).set("Authorization", auth),
-    delete: (url: string) => request(app).delete(url).set("Authorization", auth),
-  };
-};
 const admin = as("SUPER_ADMIN");
 const receptionist = as("RECEPTIONIST");
 
@@ -200,7 +187,7 @@ describe("PUT /appointments/:id", () => {
 
 describe("arrive, cancel and complete", () => {
   it("marks a patient as arrived on the day, and not twice", async () => {
-    const appointment = await book({ date: TODAY });
+    const appointment = await book({ date: today() });
     const url = `/api/v1/appointments/${appointment._id}/arrive`;
 
     const res = await receptionist.post(url);
@@ -259,14 +246,14 @@ describe("arrive, cancel and complete", () => {
   });
 
   it("only lets the front desk cancel and mark arrival", async () => {
-    const appointment = await book({ date: TODAY });
+    const appointment = await book({ date: today() });
     expect((await drRao.asDoctor.delete(`/api/v1/appointments/${appointment._id}`)).status).toBe(403);
     expect((await drRao.asDoctor.post(`/api/v1/appointments/${appointment._id}/arrive`)).status).toBe(403);
     expect((await admin.post(`/api/v1/appointments/${appointment._id}/arrive`)).status).toBe(200);
   });
 
   it("lets only one of two conflicting changes win", async () => {
-    const appointment = await book({ date: TODAY });
+    const appointment = await book({ date: today() });
     const responses = await Promise.all([
       receptionist.post(`/api/v1/appointments/${appointment._id}/arrive`),
       receptionist.delete(`/api/v1/appointments/${appointment._id}`),
@@ -281,16 +268,16 @@ describe("arrive, cancel and complete", () => {
 
 describe("GET /dashboard/summary", () => {
   beforeEach(async () => {
-    await book({ date: TODAY, slotStart: "09:00" });
-    await book({ date: TODAY, slotStart: "09:15", status: "ARRIVED" });
-    await book({ date: TODAY, slotStart: "09:30", status: "CANCELLED", isActive: false });
-    await book({ date: TODAY, slotStart: "10:00", doctorId: drMehta.id, departmentId: cardiologyId });
+    await book({ date: today(), slotStart: "09:00" });
+    await book({ date: today(), slotStart: "09:15", status: "ARRIVED" });
+    await book({ date: today(), slotStart: "09:30", status: "CANCELLED", isActive: false });
+    await book({ date: today(), slotStart: "10:00", doctorId: drMehta.id, departmentId: cardiologyId });
     await book({ date: FUTURE, slotStart: "10:15" });
   });
 
   it("counts today's appointments by status", async () => {
     const { data } = (await receptionist.get("/api/v1/dashboard/summary")).body;
-    expect(data).toEqual({ date: TODAY, counts: { SCHEDULED: 2, ARRIVED: 1, COMPLETED: 0, CANCELLED: 1 } });
+    expect(data).toEqual({ date: today(), counts: { SCHEDULED: 2, ARRIVED: 1, COMPLETED: 0, CANCELLED: 1 } });
   });
 
   it("counts only a doctor's own appointments, and gives the admin overall totals", async () => {

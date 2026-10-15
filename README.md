@@ -22,7 +22,8 @@ The reasoning behind the main decisions is in [ENGINEERING_DECISIONS.md](ENGINEE
 
 - **Server:** Node.js, Express 5, MongoDB with Mongoose, Zod, JWT, bcrypt, Socket.IO
 - **Client:** React, React Router, TanStack Query, React Hook Form, Zod, Tailwind CSS (built with Vite)
-- **Tests:** Vitest, Supertest, an in-memory MongoDB, socket.io-client
+- **Tests:** Vitest, Supertest, an in-memory MongoDB, socket.io-client; Testing Library and jsdom on the client
+- **Versions:** TypeScript 7 builds and checks both packages; the repository root also carries TypeScript 6, which `typescript-eslint` requires for linting. The server pins `@types/node` 24 to match the Node 24 it targets, and the build tools bring their own newer copy. Node 22.22 is the minimum because React Router 8 needs it
 
 ## Folder structure
 
@@ -37,7 +38,8 @@ server/
     controllers/   thin request handlers
     services/      business logic (booking, slots, status workflow, auth, ...)
     utils/         AppError, response helper, time and token helpers
-    scripts/       seed script
+    types/         the signed-in user on Express requests
+    scripts/       seed script and its safety check
     app.ts         Express app
     realtime.ts    Socket.IO setup and the publish function
     server.ts      entry point
@@ -68,7 +70,7 @@ Browser (React) ── HTTP /api/v1 ──▶ route ─▶ middleware ─▶ con
 
 ## Installation
 
-Requires Node 22.9 or newer (developed on Node 24) and a MongoDB database (a local one, or an Atlas connection string).
+Requires Node 22.22 or newer (developed on Node 24; `.nvmrc` says 24) and a MongoDB database (a local one, or an Atlas connection string).
 
 ```bash
 npm install
@@ -119,14 +121,16 @@ See `server/.env.example`. The server refuses to start if a required value is mi
 
 | Variable | Purpose |
 |---|---|
-| `NODE_ENV` | `development`, `test` or `production`. In production the refresh cookie is `Secure` and the seed script refuses to run |
+| `NODE_ENV` | `development`, `test` or `production`. In production the refresh cookie is `Secure` |
 | `PORT` | API port (default 4000) |
 | `CLIENT_ORIGIN` | The one origin allowed by CORS (default `http://localhost:5173`) |
 | `TRUST_PROXY` | Number of reverse proxies in front of the API (default 0). Set it behind a proxy so the login limiter sees real client addresses |
+| `COOKIE_SECURE` | `true` or `false`: whether the refresh cookie is marked `Secure`. Defaults to on when `NODE_ENV` is `production` |
 | `MONGODB_URI` | MongoDB connection string (required) |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Token signing secrets, at least 32 characters each and different from each other (required) |
 | `CLINIC_TIMEZONE` | IANA timezone appointment dates and times are in (default `Asia/Kolkata`) |
 | `SEED_PASSWORD` | Password for the accounts created by the seed script |
+| `ALLOW_SEED` | Set to `1` to let the seed script run against a database that is not local, or with `NODE_ENV=production`. Without it the script refuses, since it creates accounts with a shared password |
 
 ## Database design
 
@@ -187,6 +191,8 @@ auditlogs, counters (standalone)
 | `appointments` | `{doctorId, date, slotStart}` unique, only where `isActive` | Prevents double booking; also the lookup of a doctor's bookings on a date |
 | | `{doctorId, date, status}` | A doctor's own list and status filters |
 | | `{date, slotStart, _id}` | Date-range lists and the default sort |
+| | `{status, date, slotStart, _id}` | The list sorted by status |
+| | `{createdAt, _id}` | The list sorted by when it was booked |
 | | `{departmentId, date}` | Department filter |
 | | `{patientId, date}` | A patient's appointments |
 | `refreshtokens` | `tokenHash` unique, `userId`, `expiresAt` (expires itself) | Token lookup, revoking a user's tokens, cleanup |
@@ -205,7 +211,7 @@ All routes are under `/api/v1`. Send the access token as `Authorization: Bearer 
 { "success": false, "message": "Invalid request", "code": "VALIDATION_ERROR", "errors": [{ "field": "email", "message": "…" }] }
 ```
 
-**Status codes:** `200`/`201` success, `400` invalid input or a rule such as booking a slot in the past, `401` not signed in, `403` role not allowed, `404` not found (also used for another doctor's data), `409` conflict (slot taken, invalid status change, email taken), `429` too many login attempts, `500` unexpected error (details never sent).
+**Status codes:** `200`/`201` success, `400` invalid input or a rule such as booking a slot in the past, `401` not signed in, `403` role not allowed, `404` not found (also used for another doctor's data), `409` conflict (slot taken, patient already booked at that time, invalid status change, a schedule change that would strand bookings, email taken), `413` request body too large, `429` too many login attempts, `500` unexpected error (details never sent).
 
 **Endpoints and roles** (SA = Super Admin, RC = Receptionist, DR = Doctor)
 
@@ -282,7 +288,7 @@ A slot is `BOOKED` if an active appointment holds it, `PAST` if it has already s
 }
 ```
 
-For a patient who is already registered, send `"patientId": "…"` instead of `newPatient`. Send exactly one of the two. A new patient is registered with the next patient ID, and the appointment is linked to the patient, doctor, department and slot. Errors: `400` for invalid input, a time that isn't one of the doctor's slots (`SLOT_NOT_AVAILABLE`, which covers breaks and times off the slot grid) or a slot in the past (`SLOT_IN_PAST`); `404` for an unknown doctor or patient; `409 SLOT_ALREADY_BOOKED` when someone else got the slot first.
+For a patient who is already registered, send `"patientId": "…"` instead of `newPatient`. Send exactly one of the two. A new patient is registered with the next patient ID, and the appointment is linked to the patient, doctor, department and slot. Errors: `400` for invalid input, a time that isn't one of the doctor's slots (`SLOT_NOT_AVAILABLE`, which covers breaks and times off the slot grid) or a slot in the past (`SLOT_IN_PAST`); `404` for an unknown doctor or patient; `409 SLOT_ALREADY_BOOKED` when someone else got the slot first, and `409 PATIENT_ALREADY_BOOKED` when the patient already has an appointment at an overlapping time.
 
 ### Appointments
 
@@ -293,7 +299,7 @@ SCHEDULED ──arrive──▶ ARRIVED ──complete──▶ COMPLETED
     └──cancel──▶ CANCELLED
 ```
 
-Any other change is `409 INVALID_STATUS_TRANSITION`. A cancelled or completed appointment can't be edited by the front desk, and a doctor can add consultation notes only once the patient has arrived. Consultation notes are never sent to receptionists. A doctor asking for another doctor's appointment gets `404`.
+Any other change is `409 INVALID_STATUS_TRANSITION`. Editing a cancelled or completed appointment is `409 APPOINTMENT_CANCELLED` or `APPOINTMENT_COMPLETED`, a doctor's notes before the patient has arrived are `409 PATIENT_NOT_ARRIVED`, and a change that lost a race with someone else's is `409 APPOINTMENT_CHANGED`. A cancelled or completed appointment can't be edited by the front desk, and a doctor can add consultation notes only once the patient has arrived. Consultation notes are never sent to receptionists. A doctor asking for another doctor's appointment gets `404`.
 
 **List query parameters** for `GET /appointments`
 
@@ -328,7 +334,7 @@ Logins (successful and failed), logouts, user creation, schedule changes, patien
 
 ## Testing
 
-`npm test` runs about 200 server tests against an in-memory MongoDB. They cover slot generation (sessions, breaks, past slots, timezone), the status workflow, booking and a concurrent double-booking attempt, authentication and token rotation, a role-by-endpoint access matrix, appointment search, filtering and paging, and the live events. The client is checked by the type checker, the linter and by hand in a browser; it has no automated tests.
+`npm test` runs about 240 server tests against an in-memory MongoDB, and about 40 client unit tests. They cover slot generation (sessions, breaks, past slots, timezone), the status workflow, booking and a concurrent double-booking attempt, authentication and token rotation, a role-by-endpoint access matrix, appointment search, filtering and paging, and the live events. The client's unit tests cover the API wrapper (token refresh, errors), sign-out, server-error handling in forms, formatting, the live-update hook and the dialog; its screens are checked by the type checker, the linter and by hand in a browser.
 
 ## Assumptions made
 
@@ -343,13 +349,13 @@ Logins (successful and failed), logouts, user creation, schedule changes, patien
 
 ## Known limitations
 
-- An access token is not re-checked against the database, so a deactivated user keeps access, and a signed-out user's access token keeps working, until it expires (at most 15 minutes). A live connection stays authorized until it drops.
-- If a doctor's schedule is edited after appointments exist, those appointments stay in the list but are not drawn in the scheduler when their slot no longer exists.
-- Lists narrowed by doctor, department, status or patient are sorted in memory over the filtered rows, and sorting by status or creation time has no index. This is fine for one clinic.
+- An access token is not re-checked against the database, so a deactivated user keeps access, and a signed-out user's access token keeps working, until it expires (at most 15 minutes). A live connection is closed when its token expires, and reconnects with a fresh one only while the session is still valid.
+- A schedule change that would leave a future booking on a slot that is no longer offered is refused until those appointments are cancelled. There is no rescheduling, so the admin has to cancel them first. A booking made in the instant between that check and the save is not caught.
+- Lists narrowed by doctor, department, status or patient may be sorted in memory over the filtered rows. This is fine for one clinic.
 - Only login is rate limited, and the main JavaScript bundle (about 540 kB, mostly libraries) is not split further.
 - The audit log is written but there is no screen or endpoint to read it.
-- Opening the app in two tabs at the same moment can sign both out, because both use the same single-use refresh token.
-- The client has no automated tests, and the Docker setup was not run in the environment this was built in.
+- Filters are kept in the page address (so a list can be bookmarked), which means a patient's name or number can end up in the browser history. The app sends no `Referer` header to other sites, but anyone using the same browser profile can see the history.
+- The Docker setup was not run in the environment this was built in. There is no "no-show" status: a patient who never arrives stays `SCHEDULED` until someone cancels it.
 
 ## Future improvements
 

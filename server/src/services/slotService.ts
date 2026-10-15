@@ -1,7 +1,7 @@
 import type { Types } from "mongoose";
 import { env } from "../config/env";
 import { Appointment } from "../models/appointment";
-import { User } from "../models/user";
+import { User, type AuthUser } from "../models/user";
 import { AppError } from "../utils/AppError";
 import { clinicNow, rangesOverlap, toHHMM, toMinutes } from "../utils/time";
 
@@ -43,7 +43,10 @@ type DaySlots = {
   breaks: Range[];
 };
 
-export async function getSlots(doctorId: string, date: string, now: Now = clinicNow(env.CLINIC_TIMEZONE)): Promise<DaySlots> {
+export async function getSlots(viewer: AuthUser, doctorId: string, date: string, now: Now = clinicNow(env.CLINIC_TIMEZONE)): Promise<DaySlots> {
+  // A doctor can only look at their own schedule; the same answer as for a missing doctor avoids confirming who exists.
+  if (viewer.role === "DOCTOR" && viewer.id !== doctorId) throw new AppError(404, "DOCTOR_NOT_FOUND", "Doctor not found");
+
   const doctor = await User.findOne({ _id: doctorId, role: "DOCTOR", isActive: true }).lean();
   if (!doctor?.doctorProfile) throw new AppError(404, "DOCTOR_NOT_FOUND", "Doctor not found");
 

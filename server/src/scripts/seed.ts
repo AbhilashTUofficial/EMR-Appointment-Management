@@ -1,11 +1,14 @@
 import bcrypt from "bcrypt";
 import mongoose from "mongoose";
 import { connectDb } from "../config/db";
+import { env } from "../config/env";
 import { BCRYPT_ROUNDS } from "../config/security";
 import { Department } from "../models/department";
 import { User } from "../models/user";
+import { assertSeedAllowed } from "./seedGuard";
 
 // Safe to run repeatedly: existing departments and users are left alone.
+// Runs against a local database as is; anywhere else it needs ALLOW_SEED=1 (see seedGuard.ts).
 
 type Range = [name: string, start: string, end: string];
 
@@ -56,7 +59,7 @@ const doctors = [
 ];
 
 async function seed() {
-  if (process.env.NODE_ENV === "production") throw new Error("Refusing to seed demo accounts in production");
+  assertSeedAllowed({ nodeEnv: env.NODE_ENV, mongoUri: env.MONGODB_URI, allowSeed: process.env.ALLOW_SEED });
   const password = process.env.SEED_PASSWORD;
   if (!password || password.length < 8) throw new Error("Set SEED_PASSWORD (min 8 characters) in server/.env");
 

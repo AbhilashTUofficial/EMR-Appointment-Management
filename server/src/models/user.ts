@@ -4,6 +4,9 @@ import { HHMM } from "../utils/patterns";
 export const ROLES = ["SUPER_ADMIN", "RECEPTIONIST", "DOCTOR"] as const;
 export type Role = (typeof ROLES)[number];
 
+// The signed-in user, as read from their access token.
+export type AuthUser = { id: string; role: Role };
+
 const hhmm = { type: String, required: true, match: HHMM };
 
 // Used for both sessions and breaks: a named "HH:mm" range.

@@ -1,9 +1,10 @@
 import type { RequestHandler } from "express";
 import { searchPatients } from "../services/patientService";
+import { parsedQuery } from "../middlewares/validate";
 import { sendSuccess } from "../utils/response";
-import { patientSearchSchema } from "../validators/patient";
+import type { PatientSearch } from "../validators/patient";
 
 export const searchPatientsHandler: RequestHandler = async (req, res) => {
-  const { search } = patientSearchSchema.parse(req.query);
+  const { search } = parsedQuery<PatientSearch>(res);
   sendSuccess(res, await searchPatients(search));
 };

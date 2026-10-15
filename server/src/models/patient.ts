@@ -1,4 +1,5 @@
 import { Schema, model } from "mongoose";
+import { nameWords } from "../utils/names";
 
 const patientSchema = new Schema(
   {
@@ -19,7 +20,7 @@ const patientSchema = new Schema(
 // Patient names and numbers are not edited after registration; if that changes, these must be updated alongside them.
 patientSchema.pre("validate", function () {
   this.nameLower = this.name?.toLowerCase();
-  this.nameTokens = this.nameLower?.split(/\s+/).filter(Boolean) ?? [];
+  this.nameTokens = nameWords(this.name ?? "");
   const digits = (this.mobile ?? "").replace(/\D/g, "");
   this.mobileDigits = digits;
   this.mobileLocal = digits.slice(-10);

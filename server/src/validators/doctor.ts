@@ -44,4 +44,5 @@ export const scheduleSchema = z
 
 export const doctorQuerySchema = z.object({ departmentId: objectId.optional() });
 
+export type DoctorQuery = z.infer<typeof doctorQuerySchema>;
 export type ScheduleInput = z.infer<typeof scheduleSchema>;

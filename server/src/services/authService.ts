@@ -13,6 +13,10 @@ import { logAudit } from "./auditService";
 const ACCESS_TTL_SECONDS = 15 * 60;
 export const REFRESH_TTL_SECONDS = 7 * 24 * 60 * 60;
 
+// Two tabs refreshing at the same moment send the same token. The loser of that race is turned away
+// without ending the session; a token replayed after this long is treated as stolen.
+export const REFRESH_REUSE_GRACE_MS = 10_000;
+
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 // Compared against when the email is unknown, so response time doesn't reveal which emails exist.
@@ -52,17 +56,22 @@ export async function login(email: string, password: string) {
   return { user: publicUser(user), ...tokens };
 }
 
-// Each refresh token works once: it is deleted when used and a new one is issued.
+// Each refresh token works once: it is marked as used and a new one is issued.
 export async function refresh(token?: string) {
   if (!token) throw unauthorized();
 
   const payload = verifyToken(token, env.JWT_REFRESH_SECRET);
+  const tokenHash = sha256(token);
 
   // Atomic, so two simultaneous refreshes with the same token can't both succeed.
-  const stored = await RefreshToken.findOneAndDelete({ tokenHash: sha256(token) });
+  const stored = await RefreshToken.findOneAndUpdate({ tokenHash, usedAt: null }, { usedAt: new Date() });
   if (!stored) {
-    // A valid token that is no longer stored was already used: treat it as stolen and end every session.
-    await RefreshToken.deleteMany({ userId: payload.sub });
+    const replayed = await RefreshToken.findOne({ tokenHash });
+    if (replayed?.usedAt && Date.now() - replayed.usedAt.getTime() > REFRESH_REUSE_GRACE_MS) {
+      // Used long ago and presented again: someone else holds a copy, so end every session.
+      await RefreshToken.deleteMany({ userId: replayed.userId });
+      await logAudit({ userId: replayed.userId, action: "REFRESH_TOKEN_REUSED", entityType: "User", entityId: replayed.userId });
+    }
     throw unauthorized();
   }
 

@@ -14,6 +14,7 @@ import { Select } from "../components/Select";
 import { Textarea } from "../components/Textarea";
 import { applyServerError } from "../forms";
 import { formatDate } from "../format";
+import { invalidateAppointmentData } from "../hooks/invalidate";
 import { useDoctors } from "../hooks/queries";
 
 type Mode = "existing" | "new";
@@ -42,7 +43,13 @@ const schemaFor = (mode: Mode) =>
     if (!values.gender) reject("gender", "Choose a gender");
   });
 
+// Keyed by the slot in the link, so opening a different slot never shows the previous booking's confirmation.
 export default function Book() {
+  const [params] = useSearchParams();
+  return <BookPage key={params.toString()} />;
+}
+
+function BookPage() {
   const [params] = useSearchParams();
   const doctorId = params.get("doctorId");
   const date = params.get("date");
@@ -145,8 +152,9 @@ function BookingForm({ mode, slot, schedulerLink, onBooked }: FormProps) {
     } catch (err) {
       setServerError(applyServerError(err, setError, ["patientId", "name", "mobile", "gender", "dateOfBirth", "purpose", "notes"]));
     } finally {
-      // Whether it worked or the slot was just taken, the scheduler's picture of the day is out of date.
-      await queryClient.invalidateQueries({ queryKey: ["slots"] });
+      // Whether it worked or the slot was just taken, what the scheduler, lists and dashboard show is out of date.
+      // A new patient also has to turn up in later patient searches.
+      await Promise.all([invalidateAppointmentData(queryClient), queryClient.invalidateQueries({ queryKey: ["patients"] })]);
     }
   });
 
@@ -181,9 +189,10 @@ function BookingForm({ mode, slot, schedulerLink, onBooked }: FormProps) {
 
       {serverError && (
         <ErrorAlert>
-          {serverError} <Link to={schedulerLink} className="font-medium underline">
-              Back to the scheduler
-            </Link>
+          {serverError}{" "}
+          <Link to={schedulerLink} className="font-medium underline">
+            Back to the scheduler
+          </Link>
         </ErrorAlert>
       )}
       <Button type="submit" disabled={isSubmitting}>

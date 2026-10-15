@@ -5,14 +5,14 @@ import { env } from "./config/env";
 import type { AppointmentDoc } from "./models/appointment";
 import { verifyAccessToken } from "./utils/jwt";
 
-export type AppointmentEvent = "appointment:created" | "appointment:updated" | "appointment:cancelled";
+type AppointmentEvent = "appointment:created" | "appointment:updated" | "appointment:cancelled";
 
 let io: Server | undefined;
 
 export function initRealtime(httpServer: HttpServer) {
   io = new Server(httpServer, { cors: { origin: env.CLIENT_ORIGIN, credentials: true } });
 
-  // Same access token, checked by the same code, as the API. It is checked once, when the connection is made.
+  // Same access token, checked by the same code, as the API. It is checked when the connection is made.
   io.use((socket, next) => {
     try {
       socket.data.user = verifyAccessToken(socket.handshake.auth.token);
@@ -24,8 +24,15 @@ export function initRealtime(httpServer: HttpServer) {
 
   // Staff see every change; a doctor only their own.
   io.on("connection", (socket) => {
-    const { id, role } = socket.data.user;
+    const { id, role, exp } = socket.data.user;
     socket.join(role === "DOCTOR" ? `doctor:${id}` : "staff");
+
+    // The token is only checked at connect time, so end the connection when it would have expired.
+    // The client reconnects with a fresh token, or not at all if the session has ended.
+    if (exp) {
+      const timer = setTimeout(() => socket.disconnect(true), Math.max(0, exp * 1000 - Date.now()));
+      socket.on("disconnect", () => clearTimeout(timer));
+    }
   });
 
   return io;
