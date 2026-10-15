@@ -8,6 +8,7 @@ import { routes } from "./routes";
 import { errorHandler, notFound } from "./middlewares/errorHandler";
 
 export const app = express();
+app.set("trust proxy", env.TRUST_PROXY);
 
 app.use(helmet());
 app.use(cors({ origin: env.CLIENT_ORIGIN, credentials: true }));

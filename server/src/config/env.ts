@@ -18,6 +18,8 @@ const schema = z
     JWT_ACCESS_SECRET: z.string().min(32),
     JWT_REFRESH_SECRET: z.string().min(32),
     // Appointment dates and times are wall-clock times in this zone.
+    // How many reverse proxies sit in front of the API (0 when none). Needed so the login limiter sees real client IPs.
+    TRUST_PROXY: z.coerce.number().int().min(0).default(0),
     CLINIC_TIMEZONE: z.string().refine(isTimeZone, "Unknown timezone").default("Asia/Kolkata"),
   })
   // Same secret for both would let an access token pass as a refresh token.

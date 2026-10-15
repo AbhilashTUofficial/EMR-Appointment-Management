@@ -7,9 +7,6 @@ import Dashboard from "./pages/Dashboard";
 import ErrorPage from "./pages/ErrorPage";
 import Login from "./pages/Login";
 import Scheduler from "./pages/Scheduler";
-import DoctorSchedule from "./pages/admin/DoctorSchedule";
-import Doctors from "./pages/admin/Doctors";
-import Receptionists from "./pages/admin/Receptionists";
 
 export const router = createBrowserRouter([
   { path: "/login", element: <Login />, errorElement: <ErrorPage /> },
@@ -30,9 +27,10 @@ export const router = createBrowserRouter([
           {
             element: <RequireAuth roles={["SUPER_ADMIN"]} />,
             children: [
-              { path: "/admin/doctors", element: <Doctors /> },
-              { path: "/admin/doctors/:id/schedule", element: <DoctorSchedule /> },
-              { path: "/admin/receptionists", element: <Receptionists /> },
+              // Loaded on demand: only admins ever open these.
+              { path: "/admin/doctors", lazy: async () => ({ Component: (await import("./pages/admin/Doctors")).default }) },
+              { path: "/admin/doctors/:id/schedule", lazy: async () => ({ Component: (await import("./pages/admin/DoctorSchedule")).default }) },
+              { path: "/admin/receptionists", lazy: async () => ({ Component: (await import("./pages/admin/Receptionists")).default }) },
             ],
           },
         ],
