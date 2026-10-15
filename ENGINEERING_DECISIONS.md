@@ -42,7 +42,7 @@ The other sections explain the decisions behind individual features.
 
 **`isActive` on appointments.** It is true while an appointment holds its slot and set to false when it is cancelled. A partial unique index can only filter on simple equality, so a boolean is the easiest way to say "only live bookings count".
 
-**`nameLower` on patients.** A lowercase copy of the name so that searching by the start of a name is an anchored prefix match on an index instead of a scan.
+**Searchable forms of the name and number on patients.** The name is also stored as a list of lowercase words, and the mobile number as digits only and as its last 10 digits. Searches match the start of a word or the start of a number against indexes on those fields, so "das" finds "Rohan Das" and "9876543210" finds "+91 98765-43210".
 
 **Mobile numbers are not unique.** Family members often share a number, so a unique index would block legitimate bookings.
 
@@ -53,7 +53,7 @@ Each index is there for a query the screens will run:
 - `departments.name` and `departments.code` (unique): no duplicate departments.
 - `users.email` (unique): login lookup and duplicate-email protection.
 - `users {role, doctorProfile.departmentId}`: listing doctors, optionally by department.
-- `patients.patientCode` (unique), `patients.mobile`, `patients.nameLower`: the three ways receptionists look a patient up.
+- `patients.patientCode` (unique), `patients.nameTokens`, `patients.mobileDigits`, `patients.mobileLocal`: the three ways receptionists look a patient up.
 - `appointments {doctorId, date, slotStart}` (unique, partial on `isActive: true`): prevents double booking and doubles as the lookup of one doctor's bookings on a date. Cancelled appointments are left out, so the index stays small and a cancelled slot can be booked again.
 - `appointments {doctorId, date, status}`: a doctor's own list, including cancelled, and status filters.
 - `appointments {date, slotStart, _id}`: date-range lists across doctors and the default sort. It ends in `_id`, the last sort key, so the default list needs no in-memory sorting.
@@ -150,9 +150,9 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 
 **Patient IDs come from an atomic counter.** `PT-000001`, `PT-000002`, … are generated with a single `$inc` on a counter document, so two patients registered at once never get the same ID. An ID is not reused if a patient is deleted after losing a booking race.
 
-**Search is a prefix match.** A search term matches patient IDs exactly, the start of a mobile number, or the start of a name (case-insensitive). The prefix matches use the indexes on those fields. The cost is that a name search starts at the beginning of the full name, so "nair" won't find "Asha Nair". For the clinic sizes this module targets that is acceptable. A search index over words would be the next step, covered in the scaling notes.
+**Search matches the start of words and numbers.** A search term matches a patient ID exactly, the start of any word of a name (every word typed must start some word of the name), or the start of a mobile number written with or without its country code, spaces or dashes. These are anchored prefix matches on indexed fields, so they stay index lookups. What it can't do is find text in the middle of a word; a search index would be the next step, covered in the scaling notes.
 
-**Mobile numbers are stored without spaces or dashes** and aren't unique, since family members often share one number.
+**Mobile numbers are kept as entered** (so a screen can show "+91 98765-43210") alongside the digit-only forms used for searching, and aren't unique, since family members often share one number.
 
 **The search term is treated literally.** It is escaped before being used in a pattern, so characters like `.*` can't turn a search into a broad regular expression.
 
@@ -227,7 +227,7 @@ What was implemented, and the section with the detail:
 - **Authorization on the server:** every protected route names the roles allowed; doctors are scoped to their own data inside the services, and another doctor's data is a `404`. A test checks every endpoint against every role.
 - **Input validation:** every body, query and id is validated with Zod before it reaches a service. Unknown fields are dropped, so a request can't set fields like a role or an `isActive` flag. Search text is escaped and sort fields are chosen from a fixed list, so queries can't be steered.
 - **Browser protection:** one allowed CORS origin, Helmet's security headers, Express's default 100 KB limit on request bodies, and the refresh token is never readable by scripts.
-- **Brute force:** login is limited to 10 failed attempts per 15 minutes per IP address, answers the same way for every kind of failure, and compares passwords even for unknown emails so response time doesn't reveal which emails exist.
+- **Brute force:** failed logins are limited to 10 per account per IP address and 50 per IP address, per 15 minutes, and a blocked request says how long to wait. Counting per account means someone guessing one password can't lock out colleagues on the same office network. Login also answers the same way for every kind of failure, and compares passwords even for unknown emails so response time doesn't reveal which emails exist.
 - **Secrets and configuration:** all secrets come from environment variables, are checked at startup (length, different from each other), and are never committed. The seed script refuses to run in production.
 - **No leaking:** error responses never include stack traces, database errors or token details; unexpected errors return a generic message and are logged on the server. Responses are built field by field, and consultation notes are withheld from receptionists.
 - **Live connections** require the same valid access token as the API, rooms limit who hears what, and events carry no patient data.
@@ -248,7 +248,7 @@ Each optimization and why it was needed.
 - **Count and page run together,** so the total costs no extra waiting. An unfiltered total uses the collection's own estimate instead of a scan.
 - **Lean reads.** Reads return plain objects instead of full Mongoose documents, the patient lookup for a page selects only the fields a row shows, and responses are built field by field.
 - **Slots are calculated, not stored.** There is nothing to regenerate when a schedule changes and no stale rows. A day costs one indexed lookup for its bookings.
-- **Prefix searches** on patient names, mobile numbers and patient IDs use their indexes. The search text is anchored at the start so the index can be used.
+- **Anchored searches** on the words of patient names, mobile numbers and patient IDs use their indexes, because the search text is anchored at the start of a word or number so the index can be used.
 - **One aggregation for the dashboard,** bounded to a single day, instead of loading appointments and counting in the application.
 - **Index builds are awaited at startup,** so the server never takes bookings before the unique slot index exists.
 - **Live updates instead of polling.** Screens stay current through small events, so nothing polls the API.

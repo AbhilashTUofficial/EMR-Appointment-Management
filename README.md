@@ -183,7 +183,7 @@ auditlogs, counters (standalone)
 | `users` | `email` unique | Login, duplicate-email protection |
 | | `{role, doctorProfile.departmentId}` | Listing doctors by department |
 | `departments` | `name`, `code` unique | No duplicate departments |
-| `patients` | `patientCode` unique, `mobile`, `nameLower` | The three ways a patient is looked up |
+| `patients` | `patientCode` unique, `nameTokens`, `mobileDigits`, `mobileLocal` | The three ways a patient is looked up: ID, any word of the name, a mobile number with or without country code |
 | `appointments` | `{doctorId, date, slotStart}` unique, only where `isActive` | Prevents double booking; also the lookup of a doctor's bookings on a date |
 | | `{doctorId, date, status}` | A doctor's own list and status filters |
 | | `{date, slotStart, _id}` | Date-range lists and the default sort |
@@ -192,7 +192,7 @@ auditlogs, counters (standalone)
 | `refreshtokens` | `tokenHash` unique, `userId`, `expiresAt` (expires itself) | Token lookup, revoking a user's tokens, cleanup |
 | `auditlogs` | `{createdAt}`, `{entityType, entityId, createdAt}` | Recent activity, one record's history |
 
-**Query strategy:** list queries run one filtered, sorted, paged query plus a count; the patient and doctor for a page are loaded with one lookup each, never one per row; patient searches are anchored prefixes so they can use the indexes (doctor-name search is a case-insensitive match over the small set of doctors); slots are calculated rather than stored, with one indexed lookup for the day's bookings.
+**Query strategy:** list queries run one filtered, sorted, paged query plus a count; the patient and doctor for a page are loaded with one lookup each, never one per row; patient searches match the start of a word of the name, or of a mobile number, so they can use the indexes (doctor-name search is a case-insensitive match over the small set of doctors); slots are calculated rather than stored, with one indexed lookup for the day's bookings.
 
 ## API documentation
 
@@ -233,7 +233,7 @@ All routes are under `/api/v1`. Send the access token as `Authorization: Bearer 
 
 ### Authentication
 
-`POST /auth/login` with `{ email, password }` returns `{ user, accessToken }` and sets the refresh token as an httpOnly cookie scoped to `/api/v1/auth`. The access token lasts 15 minutes and the refresh token 7 days. Each refresh token works once: refreshing issues a new one, and reusing an old one ends all of that user's sessions. Login is limited to 10 failed attempts per 15 minutes per IP address.
+`POST /auth/login` with `{ email, password }` returns `{ user, accessToken }` and sets the refresh token as an httpOnly cookie scoped to `/api/v1/auth`. The access token lasts 15 minutes and the refresh token 7 days. Each refresh token works once: refreshing issues a new one, and reusing an old one ends all of that user's sessions. Failed logins are limited to 10 per account per IP address and 50 per IP address, per 15 minutes. A blocked request says how many minutes to wait, and other accounts on the same network are not affected.
 
 ### Doctors and schedules
 
@@ -270,7 +270,7 @@ A slot is `BOOKED` if an active appointment holds it, `PAST` if it has already s
 
 ### Patients and booking
 
-`GET /patients?search=` returns up to 10 patients matching a patient ID (`PT-000042`), the start of a mobile number, or the start of a name.
+`GET /patients?search=` returns up to 10 patients matching a patient ID (`PT-000042`), the start of a mobile number (with or without the country code, spaces or dashes), or the start of any word of the name (`das` finds `Rohan Das`).
 
 `POST /appointments`:
 
@@ -339,7 +339,7 @@ Logins (successful and failed), logouts, user creation, schedule changes, patien
 - A patient can only be marked as arrived on the day of the appointment.
 - The patient ID is `PT-` plus a number. Mobile numbers are not unique, since family members share them, and there is no merging of duplicate patients.
 - Departments are seeded, not managed in the app. Doctors and receptionists get a password from the admin; there is no password reset or deactivation screen.
-- Name search matches the start of the full name.
+- Name search matches the start of any word of the name, not text in the middle of a word.
 
 ## Known limitations
 
