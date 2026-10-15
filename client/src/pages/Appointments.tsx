@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import type { Appointment } from "../api/appointments";
 import { useAuth } from "../auth/AuthContext";
@@ -27,6 +27,28 @@ export default function Appointments() {
   const today = useSummary().data?.date; // the clinic's date, which decides when a patient can be marked as arrived
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [showFilters, setShowFilters] = useState(false); // on a phone the filters start folded away
+
+  const filterForm = useRef<HTMLFormElement>(null);
+  const filterKey = filterNames.map((name) => params.get(name)).join("|");
+  // When the filters change from outside (a link, Clear), the inputs are reset to show what is applied.
+  // The form itself is not remounted, so typing and focus are not interrupted.
+  useEffect(() => filterForm.current?.reset(), [filterKey]);
+
+  // A link, or a list that shrank while open, can leave the page number past the last page: go to the last one.
+  const page = Number(params.get("page") ?? 1);
+  const totalPages = appointments.data?.meta.totalPages;
+  useEffect(() => {
+    if (totalPages === undefined || page <= Math.max(totalPages, 1)) return;
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (totalPages > 0) next.set("page", String(totalPages));
+        else next.delete("page");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [page, totalPages, setParams]);
 
   const sortColumn = params.get("sortBy") ?? "date";
   const sortOrder = params.get("order") ?? "desc";
@@ -68,9 +90,8 @@ export default function Appointments() {
         {showFilters ? "Hide filters" : "Show filters"}
       </Button>
 
-      {/* Remounted when the filters in the URL change (for example from a link), so the inputs show what is applied. */}
       <form
-        key={filterNames.map((name) => params.get(name)).join("|")}
+        ref={filterForm}
         onSubmit={(e) => {
           e.preventDefault();
           applyFilters(new FormData(e.currentTarget));
@@ -111,27 +132,27 @@ export default function Appointments() {
       <ErrorAlert>{actions.error?.message}</ErrorAlert>
       {appointments.isError && <ErrorAlert>{appointments.error.message}</ErrorAlert>}
       {appointments.isPending && <Spinner className="py-10" />}
-      {appointments.data?.items.length === 0 && <p className="text-sm text-gray-600">No appointments match these filters.</p>}
+      {appointments.data?.items.length === 0 && appointments.data.meta.total === 0 && <p className="text-sm text-gray-600">No appointments match these filters.</p>}
 
       {appointments.data && appointments.data.items.length > 0 && (
         <div className={`overflow-x-auto rounded-lg border border-gray-200 bg-white ${appointments.isPlaceholderData ? "opacity-60" : ""}`}>
           <table className="min-w-full text-left text-sm">
             <thead className="border-b border-gray-200 bg-gray-50 text-gray-600">
               <tr>
-                <th aria-sort={ariaSort("date")} className="px-3 py-2 font-medium">
+                <th scope="col" aria-sort={ariaSort("date")} className="px-3 py-2 font-medium">
                   <button type="button" onClick={() => sortBy("date")}>
                     Date and time{arrow("date")}
                   </button>
                 </th>
-                <th className="px-3 py-2 font-medium">Patient</th>
-                {!isDoctor && <th className="px-3 py-2 font-medium">Doctor</th>}
-                <th className="px-3 py-2 font-medium">Purpose</th>
-                <th aria-sort={ariaSort("status")} className="px-3 py-2 font-medium">
+                <th scope="col" className="px-3 py-2 font-medium">Patient</th>
+                {!isDoctor && <th scope="col" className="px-3 py-2 font-medium">Doctor</th>}
+                <th scope="col" className="px-3 py-2 font-medium">Purpose</th>
+                <th scope="col" aria-sort={ariaSort("status")} className="px-3 py-2 font-medium">
                   <button type="button" onClick={() => sortBy("status")}>
                     Status{arrow("status")}
                   </button>
                 </th>
-                <th className="sticky right-0 bg-gray-50 px-3 py-2 font-medium">Actions</th>
+                <th scope="col" className="sticky right-0 bg-gray-50 px-3 py-2 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">

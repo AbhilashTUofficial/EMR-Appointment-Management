@@ -10,7 +10,7 @@ export type Doctor = Schedule & {
   departmentId: string;
   specialization?: string;
 };
-export type NewDoctor = { name: string; email: string; password: string; departmentId: string; specialization?: string };
+type NewDoctor = { name: string; email: string; password: string; departmentId: string; specialization?: string };
 
 export const getDoctors = async (departmentId?: string) =>
   (await http<Doctor[]>(`/doctors${departmentId ? `?${new URLSearchParams({ departmentId })}` : ""}`)).data;

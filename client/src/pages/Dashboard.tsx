@@ -61,6 +61,7 @@ export default function Dashboard() {
                 View all
               </Link>
             </div>
+            {today.isError && <ErrorAlert>{today.error.message}</ErrorAlert>}
             {today.data?.items.length === 0 && <p className="text-sm text-gray-600">Nothing scheduled for today.</p>}
             <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white empty:hidden">
               {today.data?.items.map((a) => (

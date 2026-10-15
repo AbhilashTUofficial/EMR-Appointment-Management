@@ -1,4 +1,4 @@
-export type ApiResponse<T> = { success: true; message: string; data: T; meta: Record<string, unknown> };
+type ApiResponse<T> = { success: true; message: string; data: T; meta: Record<string, unknown> };
 
 export class ApiError extends Error {
   constructor(
@@ -46,12 +46,17 @@ function send(path: string, init: RequestInit) {
   });
 }
 
-// Refresh tokens work once, so concurrent callers must share a single request.
+// Refresh tokens work once and the cookie is shared by every open tab, so tabs take their turn:
+// the second one then sends the cookie the first one just received. (Not available on plain http
+// pages other than localhost; the server also tolerates two refreshes landing together.)
+const oneTabAtATime = <T>(task: () => Promise<T>): Promise<T> =>
+  "locks" in navigator ? navigator.locks.request("emr-refresh", task) : task();
+
+// Within this tab, concurrent callers share a single request.
 let refreshing: Promise<Session> | null = null;
 
 export function refreshSession(): Promise<Session> {
-  refreshing ??= send("/auth/refresh", { method: "POST" })
-    .then((res) => parse<Session>(res))
+  refreshing ??= oneTabAtATime(() => send("/auth/refresh", { method: "POST" }).then((res) => parse<Session>(res)))
     .then((body) => {
       accessToken = body.data.accessToken;
       return body.data;

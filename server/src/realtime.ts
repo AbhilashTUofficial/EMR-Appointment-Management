@@ -5,7 +5,7 @@ import { env } from "./config/env";
 import type { AppointmentDoc } from "./models/appointment";
 import { verifyAccessToken } from "./utils/jwt";
 
-export type AppointmentEvent = "appointment:created" | "appointment:updated" | "appointment:cancelled";
+type AppointmentEvent = "appointment:created" | "appointment:updated" | "appointment:cancelled";
 
 let io: Server | undefined;
 

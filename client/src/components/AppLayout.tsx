@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { NavLink, Outlet } from "react-router";
 import type { Role } from "../api/http";
 import { useAuth } from "../auth/AuthContext";
 import { useRealtime } from "../hooks/useRealtime";
 import { Button } from "./Button";
+import { ErrorAlert } from "./ErrorAlert";
 
 const links: { to: string; label: string; roles?: Role[] }[] = [
   { to: "/", label: "Dashboard" },
@@ -20,8 +22,19 @@ const roleLabel: Record<Role, string> = {
 
 export function AppLayout() {
   const { user, logout } = useAuth();
-  useRealtime();
+  const live = useRealtime();
+  const [signOutError, setSignOutError] = useState("");
   if (!user) return null;
+
+  // If the server can't be reached the sign-in cookie would stay valid, so say so instead of pretending.
+  const signOut = async () => {
+    setSignOutError("");
+    try {
+      await logout();
+    } catch {
+      setSignOutError("Could not sign out. Check your connection and try again.");
+    }
+  };
 
   return (
     <div className="min-h-dvh bg-gray-50">
@@ -45,13 +58,19 @@ export function AppLayout() {
               {user.name}
               {user.name !== roleLabel[user.role] && <span className="text-gray-500"> ({roleLabel[user.role]})</span>}
             </span>
-            <Button variant="secondary" onClick={logout}>
+            <Button variant="secondary" onClick={signOut}>
               Sign out
             </Button>
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6">
+      {!live && (
+        <p role="status" className="bg-amber-50 px-4 py-1.5 text-center text-sm text-amber-800">
+          Live updates are paused while reconnecting. Reload if the screen looks out of date.
+        </p>
+      )}
+      <main className="mx-auto max-w-6xl space-y-4 px-4 py-6">
+        <ErrorAlert>{signOutError}</ErrorAlert>
         <Outlet />
       </main>
     </div>
