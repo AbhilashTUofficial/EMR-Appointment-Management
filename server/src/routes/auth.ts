@@ -6,6 +6,6 @@ import { loginSchema } from "../validators/auth";
 
 export const authRoutes = Router();
 
-authRoutes.post("/login", loginLimiter, validate(loginSchema), loginHandler);
+authRoutes.post("/login", ...loginLimiter, validate(loginSchema), loginHandler);
 authRoutes.post("/refresh", refreshHandler);
 authRoutes.post("/logout", logoutHandler);
