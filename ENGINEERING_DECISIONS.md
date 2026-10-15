@@ -70,27 +70,29 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 
 **Where the tokens live.** The access token is returned in the response body and kept in memory by the client, so injected scripts can't read it from storage. The refresh token is an httpOnly, SameSite=Strict cookie limited to `/api/v1/auth`, so scripts can't read it and the browser only sends it to the auth routes. SameSite=Strict keeps the browser from sending it on cross-site requests, which covers CSRF for the one endpoint that uses it.
 
-**Refresh tokens are single-use and stored hashed.** Only a SHA-256 hash is saved, so a database leak doesn't give out usable tokens. On refresh the old token is deleted and a new one issued. The delete is atomic, so two requests racing with the same token can't both succeed. If a valid token is no longer stored, it was already used, so every refresh token of that user is deleted and they have to log in again. Logout deletes the token.
+**Refresh tokens are single-use and stored hashed.** Only a SHA-256 hash is saved, so a database leak doesn't give out usable tokens. On refresh the old token is marked as used (atomically, so two requests racing with the same token can't both succeed) and a new one is issued. A used token is kept until it expires. If it is presented again within 10 seconds, that is two tabs refreshing at the same moment: the loser gets a 401 and nothing else happens. If it is presented later, someone else holds a copy, so every refresh token of that user is deleted, an audit entry is written, and they have to log in again. A token the server has never seen, or that was logged out, is just a 401, so an old logged-out tab can't end other sessions. Logout deletes the token.
 
 **Two separate secrets** sign the access and refresh tokens, so one can't be passed off as the other. Verification pins the algorithm to HS256.
 
-**Login answers the same way for every failure.** Unknown email, wrong password and inactive account all return the same 401 message. When the email doesn't exist, the password is still compared against a dummy hash so response time doesn't reveal which emails are registered. Passwords are hashed with bcrypt (cost 12). Login is limited to 10 attempts per 15 minutes per IP.
+**Login answers the same way for every failure.** Unknown email, wrong password and inactive account all return the same 401 message. When the email doesn't exist, the password is still compared against a dummy hash so response time doesn't reveal which emails are registered. Passwords are hashed with bcrypt (cost 12). Failed logins are limited to 10 per account per IP address and 50 per IP address, per 15 minutes.
 
 **Authorization is checked on the server.** `authorize(...roles)` runs on each route after `authenticate`. The role comes from the signed token, never from the request.
 
 **Audit trail.** Logins (successful and failed) and logouts are written to `auditlogs`. A failed audit write is logged but does not fail the request.
 
-**One refresh at a time.** Because a reused refresh token ends every session, the client must send a single refresh request at a time and share its result (two simultaneous refreshes with the same cookie look like theft to the server).
+**One refresh at a time.** Within a tab, callers share a single refresh request. Across tabs, the browser's Web Locks make tabs take turns, so the second tab sends the cookie the first one just received; the server's 10-second grace covers browsers or pages without Web Locks.
 
 **Behind a proxy.** The login limiter keys on the client IP, so when the API is deployed behind a reverse proxy, `trust proxy` has to be configured or every user shares the proxy's address.
 
 **Known limit.** A deactivated user's current access token keeps working until it expires (at most 15 minutes), because access tokens are not checked against the database.
 
+**Operational settings.** The refresh cookie's `Secure` flag follows `NODE_ENV=production` unless `COOKIE_SECURE` says otherwise (a plain-http demo behind production settings would otherwise lose its session). The seed script creates accounts with one shared password, so it refuses any database that isn't local, and `NODE_ENV=production`, unless `ALLOW_SEED=1` is set on purpose. The access log records the path without its query string, since query strings carry patient names and numbers. On `SIGTERM`/`SIGINT` the server stops accepting connections, closes Socket.IO and the database, and exits, with a ten-second limit.
+
 ## Client authentication
 
 **Session state is one React context.** `AuthProvider` holds the current user. On load it calls `/auth/refresh`, because after a page reload the in-memory access token is gone but the refresh cookie is still there. Until that call finishes, the route guard shows a spinner instead of flashing the login page.
 
-**One shared refresh request.** The refresh token works once, and the server treats a second use as theft. So every caller of `refreshSession()` shares the same in-flight request. This matters in development, where React StrictMode runs effects twice, and whenever several API calls hit an expired token at the same time.
+**One shared refresh request.** Every caller of `refreshSession()` shares the same in-flight request, which matters in development (React StrictMode runs effects twice) and whenever several API calls hit an expired token at once. Other tabs are kept out by a Web Lock around the request.
 
 **Expired access tokens are handled in one place.** The `http` wrapper attaches the token, and on a 401 from any non-auth route it refreshes once and retries the request. If the refresh fails, the session is cleared and the user is sent to the login page.
 
@@ -101,6 +103,10 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 **Only a rejected refresh ends the session.** If a refresh fails with 401, or a retried request is still rejected, the user is signed out. A network error or server failure leaves them signed in so a brief outage doesn't throw away their session.
 
 **Cached data is cleared on logout** so the next person on the same browser never sees the previous user's data.
+
+**Signing out reaches every tab and must reach the server.** Signing out posts a message to the other open tabs (BroadcastChannel), which clear their data too. If the server can't be reached, the user stays signed in and is told so, because the sign-in cookie would otherwise stay valid for up to 7 days on a shared computer.
+
+**Filters in the URL.** List filters live in the page address so a view can be bookmarked or shared, at the cost that a patient's name or number can sit in the browser history. nginx sends `Referrer-Policy: no-referrer`, so the address is never passed on to another site. The server's own logs leave the query string out.
 
 **Forms use React Hook Form with Zod.** Validation runs in the browser for quick feedback, and the server validates again, since the browser can't be trusted.
 
@@ -126,7 +132,7 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 
 **Past slots use the clinic's clock.** Dates and times are wall-clock values in one timezone (`CLINIC_TIMEZONE`, default Asia/Kolkata), so "is this slot in the past" compares the slot with the current date and time in that zone, worked out with `Intl.DateTimeFormat` and no date library. A slot counts as past once it has started. The function takes "now" as a parameter so the tests can fix the time.
 
-**The server decides, the screen only shows.** The status of each slot comes from the API. The client has no logic for deciding what is in the past, so it can't disagree with what the booking endpoint will accept. The only date it works out itself is the initial value of the date picker, taken from the browser's date.
+**The server decides, the screen only shows.** The status of each slot comes from the API. The client has no logic for deciding what is in the past, so it can't disagree with what the booking endpoint will accept. The only date it works out itself is the initial value of the date picker, which is the clinic's date from the dashboard summary (the browser's date only until that arrives), so it agrees with the server even when the browser is in another timezone.
 
 **One query for bookings.** Bookings for the day come from a single lookup on doctor, date and active appointments, which matches the unique slot index. A booked slot shows as booked even after its time has passed, so the history of the day stays visible.
 
@@ -135,6 +141,8 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 ## Preventing double booking
 
 **The database enforces it, not the application.** Appointments have a unique index on doctor, date and slot start, limited to documents where `isActive` is true. If two requests try to book the same slot at the same moment, both inserts reach MongoDB and exactly one succeeds. The other gets a duplicate-key error, which the service turns into `409 SLOT_ALREADY_BOOKED`. Nothing in the application has to be correct about timing for this to hold.
+
+**A schedule change can't strand a booking.** Slots are calculated, so editing a doctor's schedule could otherwise leave a future appointment on a slot that is no longer offered (a different slot length, a removed day, a new break). Saving a schedule first checks the doctor's upcoming active appointments against the new schedule and answers `409 SCHEDULE_CONFLICT` naming the first one. Past and cancelled appointments don't count. Because every future booking always fits the current schedule, booking itself needs no range-overlap check. The check and the save are separate steps, so a booking made in between could slip through; with one admin editing a schedule that is rare enough to accept.
 
 **Why not "check, then insert".** Two requests can both check, both see the slot free, and both insert. The check only narrows the window. The service still does one before inserting, but only so most late requests fail early and cheaply, before a patient record is created for them. A comment in the code says the index is the real guard. Removing the check doesn't change the outcome: the concurrency test below passes without it, because the index alone decides the winner.
 
@@ -149,6 +157,12 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 ## Patients
 
 **Patient IDs come from an atomic counter.** `PT-000001`, `PT-000002`, … are generated with a single `$inc` on a counter document, so two patients registered at once never get the same ID. An ID is not reused if a patient is deleted after losing a booking race.
+
+**A new patient is created before their appointment, and removed if the slot is lost.** The other order (appointment first) would leave an appointment pointing at a missing patient if the process died in between, which breaks the list; a patient with no appointment is harmless. If the booking loses the race for the slot, the new patient is deleted again, and a failure of that clean-up is logged without hiding the `409`. The very first two patients can both try to create the counter document; the loser retries once.
+
+**One person, one place at a time.** Booking an existing patient is refused with `409 PATIENT_ALREADY_BOOKED` if they already hold an active appointment at an overlapping time (with any doctor). Cancelling the first frees them.
+
+**A search that matches too much says so.** Filtering the appointment list by patient first collects matching patient ids. Past 1,000 matches the request fails with `400 SEARCH_TOO_BROAD` rather than silently showing only some of the appointments.
 
 **Search matches the start of words and numbers.** A search term matches a patient ID exactly, the start of any word of a name (every word typed must start some word of the name), or the start of a mobile number written with or without its country code, spaces or dashes. These are anchored prefix matches on indexed fields, so they stay index lookups. What it can't do is find text in the middle of a word; a search index would be the next step, covered in the scaling notes.
 
@@ -210,20 +224,20 @@ After arrive, cancel or complete, the client refetches the appointment lists, th
 
 **Events are sent after the database write succeeds,** from the service that made the change. A request that fails (for example a booking that loses the race for a slot) sends nothing. A test checks this.
 
-**Authentication.** The connection must present a valid access token, verified once at connect time with the same code the API uses. The client passes the token through a function that runs on every connection attempt, so a reconnect uses the current token. If the token has expired, the connection is refused with `UNAUTHORIZED` and the client renews it (sharing the single refresh request used for API calls) and reconnects.
+**Authentication.** The connection must present a valid access token, verified at connect time with the same code the API uses. The client passes the token through a function that runs on every connection attempt, so a reconnect uses the current token. The server closes the connection when the token it was opened with expires; the client then renews its token (sharing the single refresh request used for API calls) and reconnects, or stays disconnected if the session has ended. A connection refused with `UNAUTHORIZED` is handled the same way, once. While the connection is down the layout shows a notice.
 
 **Reconnecting.** After any (re)connection the client refetches its screens, because events sent while it was offline are not replayed.
 
 **Where the refetching lives.** One hook, mounted once in the app layout, listens for the events and invalidates the cached queries for slots, appointments and the dashboard. Only queries that are currently on screen refetch; the others are just marked stale. Screens need no code of their own to stay current.
 
-**Known limits.** A socket is authorized when it connects. If a user is deactivated, or their token expires while they stay connected, the connection keeps working until it drops. With more than one server instance, Socket.IO needs a shared adapter (for example Redis) so an event reaches users connected to a different instance; the scaling notes cover this.
+**Known limits.** A socket is authorized when it connects and again each time its token expires, but a user who is deactivated keeps their connection until then (at most 15 minutes). With more than one server instance, Socket.IO needs a shared adapter (for example Redis) so an event reaches users connected to a different instance; the scaling notes cover this.
 
 ## Security measures
 
 What was implemented, and the section with the detail:
 
 - **Passwords** are hashed with bcrypt (cost 12). The hash is excluded from queries by default and never appears in a response. Passwords are limited by bytes, not characters, because bcrypt silently ignores anything past 72 bytes. (Authentication)
-- **Tokens:** short-lived access tokens and single-use, hashed, rotating refresh tokens in an httpOnly, SameSite=Strict cookie; separate signing secrets, the algorithm pinned, and reuse of a refresh token ends all of that user's sessions. (Authentication, Client authentication)
+- **Tokens:** short-lived access tokens and single-use, hashed, rotating refresh tokens in an httpOnly, SameSite=Strict cookie; separate signing secrets, the algorithm pinned, and a refresh token replayed after its grace period ends all of that user's sessions. (Authentication, Client authentication)
 - **Authorization on the server:** every protected route names the roles allowed; doctors are scoped to their own data inside the services, and another doctor's data is a `404`. A test checks every endpoint against every role.
 - **Input validation:** every body, query and id is validated with Zod before it reaches a service. Unknown fields are dropped, so a request can't set fields like a role or an `isActive` flag. Search text is escaped and sort fields are chosen from a fixed list, so queries can't be steered.
 - **Browser protection:** one allowed CORS origin, Helmet's security headers, Express's default 100 KB limit on request bodies, and the refresh token is never readable by scripts.
