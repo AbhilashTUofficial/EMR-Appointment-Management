@@ -17,9 +17,16 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Welcome, {user?.name}</h1>
-        <p className="text-sm text-gray-600">{user?.role === "DOCTOR" ? "Your patients today" : "Today at the clinic"}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Welcome, {user?.name}</h1>
+          <p className="text-sm text-gray-600">{user?.role === "DOCTOR" ? "Your patients today" : "Today at the clinic"}</p>
+        </div>
+        {user?.role !== "DOCTOR" && (
+          <Link to="/scheduler" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+            Book an appointment
+          </Link>
+        )}
       </div>
 
       {summary.isPending && <Spinner className="py-10" />}
@@ -29,9 +36,14 @@ export default function Dashboard() {
         <>
           <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {statuses.map((status) => (
-              <li key={status} className="rounded-lg border border-gray-200 bg-white p-4">
-                <p className="text-3xl font-semibold">{summary.data.counts[status]}</p>
-                <StatusBadge status={status} />
+              <li key={status}>
+                <Link
+                  to={`/appointments?${new URLSearchParams({ status, from: summary.data.date, to: summary.data.date })}`}
+                  className="block rounded-lg border border-gray-200 bg-white p-4 hover:border-blue-300"
+                >
+                  <p className="text-3xl font-semibold">{summary.data.counts[status]}</p>
+                  <StatusBadge status={status} />
+                </Link>
               </li>
             ))}
           </ul>
@@ -52,14 +64,19 @@ export default function Dashboard() {
             {today.data?.items.length === 0 && <p className="text-sm text-gray-600">Nothing scheduled for today.</p>}
             <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white empty:hidden">
               {today.data?.items.map((a) => (
-                <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-                  <span>
-                    <span className="font-medium">{a.slotStart}</span> · {a.patient.name} · <span className="text-gray-500">{a.purpose}</span>
-                  </span>
-                  <span className="flex items-center gap-3">
-                    {user?.role !== "DOCTOR" && <span className="text-gray-500">{a.doctor.name}</span>}
-                    <StatusBadge status={a.status} />
-                  </span>
+                <li key={a.id}>
+                  <Link
+                    to={`/appointments?${new URLSearchParams({ patient: a.patient.patientCode, from: a.date, to: a.date })}`}
+                    className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm hover:bg-gray-50"
+                  >
+                    <span>
+                      <span className="font-medium">{a.slotStart}</span> · {a.patient.name} · <span className="text-gray-500">{a.purpose}</span>
+                    </span>
+                    <span className="flex items-center gap-3">
+                      {user?.role !== "DOCTOR" && <span className="text-gray-500">{a.doctor.name}</span>}
+                      <StatusBadge status={a.status} />
+                    </span>
+                  </Link>
                 </li>
               ))}
             </ul>

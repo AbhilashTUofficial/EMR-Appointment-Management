@@ -42,7 +42,8 @@ export function AppLayout() {
           </nav>
           <div className="flex items-center gap-3 text-sm">
             <span className="text-gray-700">
-              {user.name} <span className="text-gray-500">({roleLabel[user.role]})</span>
+              {user.name}
+              {user.name !== roleLabel[user.role] && <span className="text-gray-500"> ({roleLabel[user.role]})</span>}
             </span>
             <Button variant="secondary" onClick={logout}>
               Sign out

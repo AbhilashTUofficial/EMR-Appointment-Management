@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Appointment } from "../api/appointments";
-import { formatDate } from "../format";
+import { age, formatDate } from "../format";
 import { Button } from "./Button";
 import { StatusBadge } from "./StatusBadge";
 
@@ -17,12 +17,20 @@ type Props = {
 };
 
 const small = "px-2 py-1 text-xs";
+const gender = { MALE: "Male", FEMALE: "Female", OTHER: "Other" };
 
 // One row of the appointment list, with the actions the viewer's role and the appointment's status allow.
 // The server enforces the same rules; this only decides which buttons to offer.
 export function AppointmentRow({ appointment: a, isDoctor, departmentName, busy, today, onAction, onEdit }: Props) {
-  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  // Cancelling and completing can't be undone, so they ask first.
+  const [confirming, setConfirming] = useState<"cancel" | "complete" | null>(null);
   const canEdit = isDoctor ? a.status === "ARRIVED" || a.status === "COMPLETED" : a.status === "SCHEDULED" || a.status === "ARRIVED";
+  const years = age(a.patient.dateOfBirth);
+
+  const confirm = (action: "cancel" | "complete") => {
+    setConfirming(null);
+    onAction(action, a.id);
+  };
 
   return (
     <tr className="align-top">
@@ -39,6 +47,11 @@ export function AppointmentRow({ appointment: a, isDoctor, departmentName, busy,
         <span className="text-gray-500">
           {a.patient.patientCode} · {a.patient.mobile}
         </span>
+        <br />
+        <span className="text-gray-500">
+          {gender[a.patient.gender]}
+          {years !== undefined && `, ${years} yrs`}
+        </span>
       </td>
       {!isDoctor && (
         <td className="px-3 py-2">
@@ -51,14 +64,15 @@ export function AppointmentRow({ appointment: a, isDoctor, departmentName, busy,
       <td className="px-3 py-2">
         <StatusBadge status={a.status} />
       </td>
-      <td className="px-3 py-2">
-        {confirmingCancel ? (
-          <span className="flex items-center gap-2 whitespace-nowrap">
-            Cancel this appointment?
-            <Button className={small} onClick={() => onAction("cancel", a.id)}>
-              Yes, cancel
+      {/* Stays in view when the table scrolls sideways on a narrow screen. */}
+      <td className="sticky right-0 bg-white px-3 py-2 shadow-[-6px_0_6px_-6px_rgba(0,0,0,0.2)]">
+        {confirming ? (
+          <span className="flex flex-wrap items-center gap-2">
+            {confirming === "cancel" ? "Cancel appointment?" : "Mark visit complete?"}
+            <Button variant={confirming === "cancel" ? "danger" : "primary"} className={small} onClick={() => confirm(confirming)}>
+              {confirming === "cancel" ? "Yes, cancel" : "Yes, complete"}
             </Button>
-            <Button variant="secondary" className={small} onClick={() => setConfirmingCancel(false)}>
+            <Button variant="secondary" className={small} onClick={() => setConfirming(null)}>
               Keep
             </Button>
           </span>
@@ -70,7 +84,7 @@ export function AppointmentRow({ appointment: a, isDoctor, departmentName, busy,
               </Button>
             )}
             {isDoctor && a.status === "ARRIVED" && (
-              <Button className={small} disabled={busy} aria-label={`Complete visit for ${a.patient.name}`} onClick={() => onAction("complete", a.id)}>
+              <Button className={small} disabled={busy} aria-label={`Complete visit for ${a.patient.name}`} onClick={() => setConfirming("complete")}>
                 Complete
               </Button>
             )}
@@ -80,7 +94,7 @@ export function AppointmentRow({ appointment: a, isDoctor, departmentName, busy,
               </Button>
             )}
             {!isDoctor && a.status === "SCHEDULED" && (
-              <Button variant="secondary" className={small} aria-label={`Cancel appointment for ${a.patient.name}`} onClick={() => setConfirmingCancel(true)}>
+              <Button variant="secondary" className={small} aria-label={`Cancel appointment for ${a.patient.name}`} onClick={() => setConfirming("cancel")}>
                 Cancel
               </Button>
             )}

@@ -6,6 +6,7 @@ import { refreshSession, setSessionExpiredHandler, type User } from "../api/http
 type AuthState = {
   user: User | null;
   loading: boolean; // true until the first refresh attempt has finished
+  signedOut: boolean; // the user chose to sign out, as opposed to the session simply ending
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -16,6 +17,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [signedOut, setSignedOut] = useState(false);
 
   // Cached data is cleared too, so the next person on this browser never sees the previous user's data.
   const clearSession = () => {
@@ -36,8 +38,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthState = {
     user,
     loading,
-    login: async (email, password) => setUser(await authApi.login(email, password)),
+    signedOut,
+    login: async (email, password) => {
+      setUser(await authApi.login(email, password));
+      setSignedOut(false);
+    },
     logout: async () => {
+      setSignedOut(true);
       await authApi.logout();
       clearSession();
     },

@@ -34,7 +34,9 @@ export function SlotGrid({ data, onSelect }: Props) {
   const blocks = [
     ...data.sessions.map((session) => ({ kind: "session" as const, start: session.start, session })),
     ...data.breaks.map((range) => ({ kind: "break" as const, start: range.start, range })),
-  ].sort((a, b) => a.start.localeCompare(b.start));
+  ]
+    // A break that starts when a session starts is drawn above that session's slots.
+    .sort((a, b) => a.start.localeCompare(b.start) || Number(a.kind === "session") - Number(b.kind === "session"));
 
   return (
     <div className="space-y-5">

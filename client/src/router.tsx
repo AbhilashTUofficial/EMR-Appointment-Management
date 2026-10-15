@@ -1,4 +1,4 @@
-import { Navigate, createBrowserRouter } from "react-router";
+import { createBrowserRouter } from "react-router";
 import { RequireAuth } from "./auth/RequireAuth";
 import { AppLayout } from "./components/AppLayout";
 import Appointments from "./pages/Appointments";
@@ -6,6 +6,7 @@ import Book from "./pages/Book";
 import Dashboard from "./pages/Dashboard";
 import ErrorPage from "./pages/ErrorPage";
 import Login from "./pages/Login";
+import NotFound from "./pages/NotFound";
 import Scheduler from "./pages/Scheduler";
 
 // A route whose screen is only downloaded when it is first opened.
@@ -42,5 +43,5 @@ export const router = createBrowserRouter([
       },
     ],
   },
-  { path: "*", element: <Navigate to="/" replace /> },
+  { path: "*", element: <NotFound /> },
 ]);
