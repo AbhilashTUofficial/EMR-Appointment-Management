@@ -26,7 +26,7 @@ export function createLoginLimiter(skip: () => boolean = () => env.NODE_ENV === 
   const perAccount = rateLimit({
     ...shared,
     limit: 10,
-    keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? "")}|${String(req.body?.email ?? "").toLowerCase()}`,
+    keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? "")}|${String(req.body?.email ?? "").trim().toLowerCase().slice(0, 254)}`, // same spelling the login validation uses
   });
 
   // ...and per address overall, which stops one machine from trying many accounts.

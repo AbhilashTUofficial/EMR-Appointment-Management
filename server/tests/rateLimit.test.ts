@@ -28,7 +28,7 @@ describe("login rate limit", () => {
 
   it("counts the email without regard to case, and leaves other accounts on the same address alone", async () => {
     const app = loginApp();
-    for (let i = 0; i < 10; i++) await attempt(app, i % 2 ? "Victim@EMR.test" : "victim@emr.test");
+    for (let i = 0; i < 10; i++) await attempt(app, i % 2 ? " Victim@EMR.test " : "victim@emr.test");
 
     expect((await attempt(app, "victim@emr.test")).status).toBe(429);
     expect((await attempt(app, "colleague@emr.test")).status).toBe(401);
