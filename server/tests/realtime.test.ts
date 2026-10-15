@@ -1,7 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import jwt from "jsonwebtoken";
-import request from "supertest";
 import { Types } from "mongoose";
 import { io as connectClient, type Socket } from "socket.io-client";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -10,11 +9,10 @@ import { Appointment } from "../src/models/appointment";
 import { Patient } from "../src/models/patient";
 import { User } from "../src/models/user";
 import { initRealtime } from "../src/realtime";
-import { accessToken, useTestDb } from "./helpers";
+import { FUTURE, TEST_ACCESS_SECRET, TEST_REFRESH_SECRET, accessToken, as, today, useTestDb } from "./helpers";
 
 useTestDb();
 
-const FUTURE = "2099-03-02";
 let server: Server;
 let realtime: ReturnType<typeof initRealtime>;
 let port: number;
@@ -51,24 +49,17 @@ const next = <T = Record<string, string>>(socket: Socket, event: string) =>
     });
   });
 
-// Resolves true if the event does NOT arrive within a short time.
-const staysQuiet = (socket: Socket, event: string, ms = 400) =>
-  new Promise<boolean>((resolve) => {
-    const timer = setTimeout(() => resolve(true), ms);
-    socket.once(event, () => {
-      clearTimeout(timer);
-      resolve(false);
-    });
+// Runs the action, then waits a moment longer: true if the event never arrived.
+const staysQuiet = async (socket: Socket, event: string, action: () => Promise<unknown>, ms = 400) => {
+  let received = false;
+  socket.once(event, () => {
+    received = true;
   });
-
-const as = (role: string, id?: string) => {
-  const auth = `Bearer ${accessToken(role, id)}`;
-  return {
-    post: (url: string) => request(app).post(url).set("Authorization", auth),
-    put: (url: string) => request(app).put(url).set("Authorization", auth),
-    delete: (url: string) => request(app).delete(url).set("Authorization", auth),
-  };
+  await action();
+  await new Promise((resolve) => setTimeout(resolve, ms));
+  return !received;
 };
+
 
 let rao: string;
 let mehta: string;
@@ -89,13 +80,26 @@ const book = (doctorId: string, slotStart = "09:00") =>
 
 describe("connecting", () => {
   it("needs a valid access token", async () => {
-    const refreshSecretToken = jwt.sign({ role: "SUPER_ADMIN" }, "test-refresh-secret-test-refresh-secret", { subject: "x" });
-    const unknownRole = jwt.sign({ role: "GOD" }, "test-access-secret-test-access-secret", { subject: "x" });
+    const refreshSecretToken = jwt.sign({ role: "SUPER_ADMIN" }, TEST_REFRESH_SECRET, { subject: "x" });
+    const unknownRole = jwt.sign({ role: "GOD" }, TEST_ACCESS_SECRET, { subject: "x" });
 
     for (const token of [undefined, "garbage", refreshSecretToken, unknownRole]) {
       await expect(connect(token)).rejects.toThrow("UNAUTHORIZED");
     }
     await expect(connect(accessToken("RECEPTIONIST"))).resolves.toBeTruthy();
+  });
+});
+
+describe("expiry", () => {
+  it("closes the connection when the access token runs out", async () => {
+    const socket = await connect(accessToken("RECEPTIONIST", undefined, 1));
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("still connected after the token expired")), 4000);
+      socket.on("disconnect", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
   });
 });
 
@@ -105,14 +109,16 @@ describe("schedule changes", () => {
     const raoSocket = await connect(accessToken("DOCTOR", rao));
     const mehtaSocket = await connect(accessToken("DOCTOR", mehta));
     const seen = Promise.all([next(staff, "schedule:updated"), next(raoSocket, "schedule:updated")]);
-    const quiet = staysQuiet(mehtaSocket, "schedule:updated");
 
     const schedule = { slotDurationMinutes: 15, workingDays: [{ day: 1, sessions: [{ name: "Morning", start: "09:00", end: "12:00" }], breaks: [] }] };
-    const res = await as("SUPER_ADMIN").put(`/api/v1/doctors/${rao}/schedule`).send(schedule);
+    let status = 0;
+    const quiet = await staysQuiet(mehtaSocket, "schedule:updated", async () => {
+      status = (await as("SUPER_ADMIN").put(`/api/v1/doctors/${rao}/schedule`).send(schedule)).status;
+    });
 
-    expect(res.status).toBe(200);
+    expect(status).toBe(200);
     expect(await seen).toEqual([{ doctorId: rao }, { doctorId: rao }]);
-    expect(await quiet).toBe(true);
+    expect(quiet).toBe(true);
   });
 });
 
@@ -133,19 +139,17 @@ describe("appointment events", () => {
     const raoSocket = await connect(accessToken("DOCTOR", rao));
     const mehtaSocket = await connect(accessToken("DOCTOR", mehta));
     const raoEvent = next(raoSocket, "appointment:created");
-    const mehtaQuiet = staysQuiet(mehtaSocket, "appointment:created");
 
-    await book(rao);
+    const mehtaQuiet = await staysQuiet(mehtaSocket, "appointment:created", () => book(rao));
 
     expect(await raoEvent).toMatchObject({ doctorId: rao });
-    expect(await mehtaQuiet).toBe(true);
+    expect(mehtaQuiet).toBe(true);
   });
 
   it("announces edits, arrivals, completions and cancellations", async () => {
     const staff = await connect(accessToken("RECEPTIONIST"));
     const doctor = await connect(accessToken("DOCTOR", rao));
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
-    const id = String((await Appointment.create({ patientId, doctorId: rao, departmentId: new Types.ObjectId(), date: today, slotStart: "09:00", slotEnd: "09:15", purpose: "Fever" }))._id);
+    const id = String((await Appointment.create({ patientId, doctorId: rao, departmentId: new Types.ObjectId(), date: today(), slotStart: "09:00", slotEnd: "09:15", purpose: "Fever" }))._id);
     const url = `/api/v1/appointments/${id}`;
 
     const edited = next(staff, "appointment:updated");
@@ -172,8 +176,11 @@ describe("appointment events", () => {
     expect((await book(rao)).status).toBe(201);
     await first;
 
-    const quiet = staysQuiet(staff, "appointment:created");
-    expect((await book(rao)).status).toBe(409);
-    expect(await quiet).toBe(true);
+    let status = 0;
+    const quiet = await staysQuiet(staff, "appointment:created", async () => {
+      status = (await book(rao)).status;
+    });
+    expect(status).toBe(409);
+    expect(quiet).toBe(true);
   });
 });

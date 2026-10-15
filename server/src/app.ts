@@ -12,7 +12,9 @@ app.set("trust proxy", env.TRUST_PROXY);
 
 app.use(helmet());
 app.use(cors({ origin: env.CLIENT_ORIGIN, credentials: true }));
-if (env.NODE_ENV !== "test") app.use(morgan("dev"));
+// Logs the path without its query string, which can carry patient names and numbers.
+morgan.token("path", (req) => (req as express.Request).originalUrl.split("?")[0]);
+if (env.NODE_ENV !== "test") app.use(morgan(":method :path :status :response-time ms"));
 app.use(express.json());
 app.use(cookieParser());
 

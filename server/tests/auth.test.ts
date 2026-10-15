@@ -10,7 +10,8 @@ import { errorHandler } from "../src/middlewares/errorHandler";
 import { AuditLog } from "../src/models/auditLog";
 import { RefreshToken } from "../src/models/refreshToken";
 import { User } from "../src/models/user";
-import { accessToken, useTestDb } from "./helpers";
+import { REFRESH_REUSE_GRACE_MS } from "../src/services/authService";
+import { TEST_REFRESH_SECRET, accessToken, useTestDb } from "./helpers";
 
 const PASSWORD = "Passw0rd!123";
 
@@ -81,22 +82,48 @@ describe("POST /auth/refresh", () => {
     expect(second.status).toBe(200);
     expect(second.body.data.accessToken).toBeTruthy();
     expect(refreshCookie(second)).not.toBe(refreshCookie(first));
-    expect(await RefreshToken.countDocuments()).toBe(1);
+    expect(await RefreshToken.countDocuments({ usedAt: null })).toBe(1);
 
     const oldToken = refreshCookie(first);
     expect((await request(app).post("/api/v1/auth/refresh").set("Cookie", oldToken)).status).toBe(401);
   });
 
-  it("treats a reused refresh token as theft and ends every session", async () => {
+  // Pretends the token was used a while ago, instead of waiting.
+  const usedLongAgo = () => RefreshToken.updateMany({ usedAt: { $ne: null } }, { usedAt: new Date(Date.now() - 2 * REFRESH_REUSE_GRACE_MS) });
+
+  it("treats a refresh token replayed long after use as theft: ends every session and writes an audit entry", async () => {
     const first = await login();
     const oldCookie = refreshCookie(first);
     const second = await request(app).post("/api/v1/auth/refresh").set("Cookie", oldCookie);
+    await usedLongAgo();
 
     const replay = await request(app).post("/api/v1/auth/refresh").set("Cookie", oldCookie);
     expect(replay.status).toBe(401);
+    expect(await RefreshToken.countDocuments()).toBe(0);
+    expect(await AuditLog.countDocuments({ action: "REFRESH_TOKEN_REUSED" })).toBe(1);
 
     const afterReplay = await request(app).post("/api/v1/auth/refresh").set("Cookie", refreshCookie(second));
     expect(afterReplay.status).toBe(401);
+  });
+
+  it("turns away the loser of a refresh race (two tabs, same token) without ending the session", async () => {
+    const first = await login();
+    const cookie = refreshCookie(first);
+    const [a, b] = await Promise.all([request(app).post("/api/v1/auth/refresh").set("Cookie", cookie), request(app).post("/api/v1/auth/refresh").set("Cookie", cookie)]);
+    expect([a.status, b.status].sort()).toEqual([200, 401]);
+
+    const winner = a.status === 200 ? a : b;
+    expect((await request(app).post("/api/v1/auth/refresh").set("Cookie", refreshCookie(winner))).status).toBe(200);
+    expect(await AuditLog.countDocuments({ action: "REFRESH_TOKEN_REUSED" })).toBe(0);
+  });
+
+  it("does not end other sessions when a token that was logged out is presented again", async () => {
+    const other = await login();
+    const loggedOut = refreshCookie(await login());
+    await request(app).post("/api/v1/auth/logout").set("Cookie", loggedOut);
+
+    expect((await request(app).post("/api/v1/auth/refresh").set("Cookie", loggedOut)).status).toBe(401);
+    expect((await request(app).post("/api/v1/auth/refresh").set("Cookie", refreshCookie(other))).status).toBe(200);
   });
 
   it("rejects a refresh for a user who has been deactivated", async () => {
@@ -146,7 +173,7 @@ describe("authenticate and authorize", () => {
     expect((await request(guarded).get("/admin-only")).status).toBe(401);
     expect((await request(guarded).get("/admin-only").set("Authorization", "Bearer garbage")).status).toBe(401);
 
-    const refreshTokenUsedAsAccess = jwt.sign({ role: "SUPER_ADMIN" }, "test-refresh-secret-test-refresh-secret", { subject: "x" });
+    const refreshTokenUsedAsAccess = jwt.sign({ role: "SUPER_ADMIN" }, TEST_REFRESH_SECRET, { subject: "x" });
     expect((await request(guarded).get("/admin-only").set("Authorization", `Bearer ${refreshTokenUsedAsAccess}`)).status).toBe(401);
   });
 
