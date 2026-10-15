@@ -19,7 +19,8 @@ export function useRealtime() {
     let connectedBefore = false;
 
     // The callback runs on every (re)connection, so a reconnect uses the current access token.
-    const socket = io({ auth: (send) => send({ token: getAccessToken() }) });
+    // On Vercel the live connection goes straight to the API host (Vercel cannot proxy WebSockets); elsewhere it shares the page origin.
+    const socket = io(import.meta.env.VITE_SOCKET_URL || undefined, { auth: (send) => send({ token: getAccessToken() }) });
 
     // Renews the access token (shared with API calls) and connects again. If that fails the session
     // is over, and the API calls will say so.
