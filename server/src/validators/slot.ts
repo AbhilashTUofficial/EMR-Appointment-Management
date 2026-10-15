@@ -1,7 +1,9 @@
 import { z } from "zod";
-import { objectId } from "./common";
+import { isoDate, objectId } from "./common";
 
 export const slotQuerySchema = z.object({
   doctorId: objectId,
-  date: z.iso.date(), // YYYY-MM-DD, rejects dates like 2026-13-45
+  date: isoDate, // YYYY-MM-DD, rejects dates like 2026-13-45
 });
+
+export type SlotQuery = z.infer<typeof slotQuerySchema>;

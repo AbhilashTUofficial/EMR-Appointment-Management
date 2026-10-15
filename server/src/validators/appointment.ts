@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { APPOINTMENT_STATUSES } from "../models/appointment";
 import { HHMM } from "../utils/patterns";
-import { objectId } from "./common";
+import { isoDate, objectId } from "./common";
 import { newPatientSchema } from "./patient";
 
 export const createAppointmentSchema = z
   .object({
     doctorId: objectId,
-    date: z.iso.date(),
+    date: isoDate,
     slotStart: z.string().regex(HHMM, "Use HH:mm"),
     purpose: z.string().trim().min(1, "Enter the purpose of the visit").max(500),
     notes: z.string().trim().max(1000).optional(),
@@ -36,8 +36,8 @@ export const listAppointmentsSchema = z
     doctorId: objectId.optional(),
     departmentId: objectId.optional(),
     status: z.enum(APPOINTMENT_STATUSES).optional(),
-    from: z.iso.date().optional(),
-    to: z.iso.date().optional(),
+    from: isoDate.optional(),
+    to: isoDate.optional(),
   })
   .refine((q) => !q.from || !q.to || q.from <= q.to, { message: "'from' must not be after 'to'", path: ["to"] });
 

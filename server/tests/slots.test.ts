@@ -101,6 +101,7 @@ describe("clinicNow", () => {
 
 describe("getSlots", () => {
   let doctorId: string;
+  const admin = { id: "64b0000000000000000000aa", role: "SUPER_ADMIN" as const };
 
   beforeEach(async () => {
     await Promise.all([User.deleteMany({}), Appointment.deleteMany({})]);
@@ -125,7 +126,7 @@ describe("getSlots", () => {
       ...extra,
     });
   const statuses = async (now: { date: string; time: string }) =>
-    (await getSlots(doctorId, MONDAY, now)).sessions.flatMap((s) => s.slots.map((slot) => slot.status));
+    (await getSlots(admin, doctorId, MONDAY, now)).sessions.flatMap((s) => s.slots.map((slot) => slot.status));
 
   it("offers every slot on a future day", async () => {
     expect(await statuses({ date: "2030-01-01", time: "12:00" })).toEqual(["AVAILABLE", "AVAILABLE", "AVAILABLE", "AVAILABLE"]);
@@ -143,7 +144,7 @@ describe("getSlots", () => {
 
   it("shows booked slots as booked, with the appointment id, even after they have passed", async () => {
     const appointment = await book("09:15");
-    const future = (await getSlots(doctorId, MONDAY, { date: "2030-01-01", time: "12:00" })).sessions[0].slots;
+    const future = (await getSlots(admin, doctorId, MONDAY, { date: "2030-01-01", time: "12:00" })).sessions[0].slots;
     expect(future[1]).toMatchObject({ start: "09:15", status: "BOOKED", appointmentId: appointment._id });
     expect(await statuses({ date: TUESDAY, time: "00:00" })).toEqual(["PAST", "BOOKED", "PAST", "PAST"]);
   });
@@ -154,9 +155,14 @@ describe("getSlots", () => {
   });
 
   it("returns 404 for an unknown or inactive doctor", async () => {
-    await expect(getSlots("64b000000000000000000000", MONDAY)).rejects.toMatchObject({ status: 404 });
+    await expect(getSlots(admin, "64b000000000000000000000", MONDAY)).rejects.toMatchObject({ status: 404 });
     await User.updateOne({ _id: doctorId }, { isActive: false });
-    await expect(getSlots(doctorId, MONDAY)).rejects.toMatchObject({ status: 404 });
+    await expect(getSlots(admin, doctorId, MONDAY)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("lets a doctor see only their own schedule", async () => {
+    await expect(getSlots({ id: doctorId, role: "DOCTOR" }, doctorId, MONDAY)).resolves.toBeTruthy();
+    await expect(getSlots({ id: "64b0000000000000000000bb", role: "DOCTOR" }, doctorId, MONDAY)).rejects.toMatchObject({ status: 404 });
   });
 });
 

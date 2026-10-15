@@ -2,21 +2,22 @@ import type { Types } from "mongoose";
 import { env } from "../config/env";
 import { Appointment, type AppointmentDoc, type AppointmentStatus } from "../models/appointment";
 import { Patient } from "../models/patient";
-import { User, type Role } from "../models/user";
+import { User, type AuthUser } from "../models/user";
 import { AppError } from "../utils/AppError";
 import { publish } from "../realtime";
 import { canTransition } from "../utils/appointmentStatus";
 import { escapeRegex, isDuplicateKeyError } from "../utils/mongo";
 import { clinicNow } from "../utils/time";
 import type { CreateAppointmentInput, ListAppointmentsQuery, UpdateAppointmentInput } from "../validators/appointment";
-import { logAudit } from "./auditService";
+import { auditAction } from "./auditService";
 import { createPatient, deletePatient, getPatient, mobileFilter, nameOrCodeFilter, toPatient, type PatientFields } from "./patientService";
 import { generateSchedule, hasPassed } from "./slotService";
 
-type Viewer = { id: string; role: Role };
+type Viewer = AuthUser;
 type Row = AppointmentDoc & { _id: Types.ObjectId };
 
 const slotTaken = () => new AppError(409, "SLOT_ALREADY_BOOKED", "This slot has just been booked. Please pick another.");
+const changedMeanwhile = () => new AppError(409, "APPOINTMENT_CHANGED", "This appointment was just changed by someone else. Refresh and try again.");
 const notFound = () => new AppError(404, "APPOINTMENT_NOT_FOUND", "Appointment not found");
 
 // A doctor only ever works with their own appointments; for them everyone else's simply don't exist.
@@ -49,7 +50,12 @@ async function withPeople(rows: Row[], viewer: Viewer) {
   ]);
   const patientById = new Map(patients.map((p) => [String(p._id), p]));
   const doctorById = new Map(doctors.map((d) => [String(d._id), d]));
-  return rows.map((row) => toAppointment(row, patientById.get(String(row.patientId))!, doctorById.get(String(row.doctorId))!, viewer));
+  // A row whose patient or doctor no longer exists can't be shown; leaving it out beats failing the whole page.
+  return rows.flatMap((row) => {
+    const patient = patientById.get(String(row.patientId));
+    const doctor = doctorById.get(String(row.doctorId));
+    return patient && doctor ? [toAppointment(row, patient, doctor, viewer)] : [];
+  });
 }
 
 export async function createAppointment(input: CreateAppointmentInput, user: Viewer) {
@@ -74,6 +80,12 @@ export async function createAppointment(input: CreateAppointmentInput, user: Vie
   const created = input.newPatient ? await createPatient(input.newPatient, user) : undefined;
   const patient = created ?? (await getPatient(input.patientId!));
 
+  // The same person can't be in two places at once. (A new patient has no other appointments.)
+  const overlapping = { patientId: patient._id, date: input.date, isActive: true, slotStart: { $lt: slot.end }, slotEnd: { $gt: slot.start } };
+  if (!created && (await Appointment.exists(overlapping))) {
+    throw new AppError(409, "PATIENT_ALREADY_BOOKED", "This patient already has an appointment at that time");
+  }
+
   let appointment;
   try {
     appointment = await Appointment.create({
@@ -89,14 +101,17 @@ export async function createAppointment(input: CreateAppointmentInput, user: Vie
     });
   } catch (err) {
     // Lost the race for the slot: don't leave behind the patient this request just created.
-    if (created) await deletePatient(created._id);
+    if (created) await deletePatient(created._id).catch((cleanupError) => console.error("Could not remove the unused patient", cleanupError));
     throw isDuplicateKeyError(err, "slotStart") ? slotTaken() : err;
   }
 
-  await logAudit({ userId: user.id, role: user.role, action: "APPOINTMENT_CREATED", entityType: "Appointment", entityId: appointment._id });
+  await auditAction(user, "APPOINTMENT_CREATED", "Appointment", appointment._id);
   publish("appointment:created", appointment);
   return toAppointment(appointment, patient, doctor, user);
 }
+
+// A patient search first collects matching ids; beyond this many, ask the user to narrow it down rather than showing partial results.
+const MAX_PATIENT_MATCHES = 1000;
 
 const sortKeys = { date: ["date", "slotStart"], createdAt: ["createdAt"], status: ["status", "date", "slotStart"] } as const;
 
@@ -111,7 +126,8 @@ export async function listAppointments(query: ListAppointmentsQuery, viewer: Vie
   if (query.patient) patientFilters.push(nameOrCodeFilter(query.patient));
   if (query.mobile) patientFilters.push(mobileFilter(query.mobile));
   if (patientFilters.length) {
-    const patients = await Patient.find({ $and: patientFilters }).select("_id").limit(1000).lean();
+    const patients = await Patient.find({ $and: patientFilters }).select("_id").limit(MAX_PATIENT_MATCHES + 1).lean();
+    if (patients.length > MAX_PATIENT_MATCHES) throw new AppError(400, "SEARCH_TOO_BROAD", "Too many patients match that search. Type more of the name or number.");
     filter.patientId = { $in: patients.map((p) => p._id) };
   }
 
@@ -157,19 +173,19 @@ export async function updateAppointment(id: string, changes: UpdateAppointmentIn
   const appointment = await Appointment.findOne({ _id: id, ...scopeTo(viewer) }).lean();
   if (!appointment) throw notFound();
 
-  if (appointment.status === "CANCELLED") throw new AppError(409, "APPOINTMENT_LOCKED", "A cancelled appointment can't be edited");
+  if (appointment.status === "CANCELLED") throw new AppError(409, "APPOINTMENT_CANCELLED", "A cancelled appointment can't be edited");
   if (viewer.role === "DOCTOR" && appointment.status === "SCHEDULED") {
-    throw new AppError(409, "APPOINTMENT_LOCKED", "Notes can be added once the patient has arrived");
+    throw new AppError(409, "PATIENT_NOT_ARRIVED", "Notes can be added once the patient has arrived");
   }
   if (viewer.role !== "DOCTOR" && appointment.status === "COMPLETED") {
-    throw new AppError(409, "APPOINTMENT_LOCKED", "A completed appointment can't be edited");
+    throw new AppError(409, "APPOINTMENT_COMPLETED", "A completed appointment can't be edited");
   }
 
   // Conditional on the status just read, so notes can't land on an appointment that was cancelled in the meantime.
   const updated = await Appointment.findOneAndUpdate({ _id: id, status: appointment.status }, changes, { returnDocument: "after", runValidators: true }).lean();
-  if (!updated) throw new AppError(409, "APPOINTMENT_LOCKED", "This appointment was just changed by someone else. Refresh and try again.");
+  if (!updated) throw changedMeanwhile();
 
-  await logAudit({ userId: viewer.id, role: viewer.role, action: "APPOINTMENT_UPDATED", entityType: "Appointment", entityId: updated._id });
+  await auditAction(viewer, "APPOINTMENT_UPDATED", "Appointment", updated._id);
   publish("appointment:updated", updated);
   return (await withPeople([updated], viewer))[0];
 }
@@ -196,9 +212,9 @@ export async function changeStatus(id: string, to: Exclude<AppointmentStatus, "S
   // Conditional on the status just read, so two people acting on the same appointment can't both succeed.
   const effect = statusEffects[to];
   const updated = await Appointment.findOneAndUpdate({ _id: id, status: from }, { status: to, ...effect.set(viewer) }, { returnDocument: "after" }).lean();
-  if (!updated) throw new AppError(409, "INVALID_STATUS_TRANSITION", "This appointment was just changed by someone else. Refresh and try again.");
+  if (!updated) throw changedMeanwhile();
 
-  await logAudit({ userId: viewer.id, role: viewer.role, action: effect.action, entityType: "Appointment", entityId: updated._id });
+  await auditAction(viewer, effect.action, "Appointment", updated._id);
   publish(to === "CANCELLED" ? "appointment:cancelled" : "appointment:updated", updated);
   return (await withPeople([updated], viewer))[0];
 }

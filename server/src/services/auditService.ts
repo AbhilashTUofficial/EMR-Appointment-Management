@@ -1,5 +1,6 @@
 import type { Types } from "mongoose";
 import { AuditLog } from "../models/auditLog";
+import type { AuthUser } from "../models/user";
 
 type AuditEntry = {
   userId?: Types.ObjectId | string;
@@ -18,3 +19,7 @@ export async function logAudit(entry: AuditEntry) {
     console.error("Audit log write failed", err);
   }
 }
+
+// The common case: a signed-in user did something to one record.
+export const auditAction = (user: AuthUser, action: string, entityType: string, entityId: Types.ObjectId | string) =>
+  logAudit({ userId: user.id, role: user.role, action, entityType, entityId });

@@ -2,11 +2,11 @@ import { Types } from "mongoose";
 import { env } from "../config/env";
 import { Appointment, APPOINTMENT_STATUSES } from "../models/appointment";
 import { Patient } from "../models/patient";
-import { User, type Role } from "../models/user";
+import { User, type AuthUser } from "../models/user";
 import { clinicNow } from "../utils/time";
 
 // Today's appointments by status (a doctor's own only), plus overall totals for the admin.
-export async function getSummary(viewer: { id: string; role: Role }) {
+export async function getSummary(viewer: AuthUser) {
   const date = clinicNow(env.CLINIC_TIMEZONE).date;
   const match = viewer.role === "DOCTOR" ? { date, doctorId: new Types.ObjectId(viewer.id) } : { date };
 

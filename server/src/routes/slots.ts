@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { getSlotsHandler } from "../controllers/slotController";
 import { authenticate } from "../middlewares/authenticate";
-import { authorize } from "../middlewares/authorize";
+import { anyStaff } from "../middlewares/authorize";
+import { validate } from "../middlewares/validate";
+import { slotQuerySchema } from "../validators/slot";
 
 export const slotRoutes = Router();
 
-slotRoutes.get("/", authenticate, authorize("SUPER_ADMIN", "RECEPTIONIST", "DOCTOR"), getSlotsHandler);
+slotRoutes.get("/", authenticate, anyStaff, validate(slotQuerySchema, "query"), getSlotsHandler);

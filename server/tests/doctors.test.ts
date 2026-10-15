@@ -5,18 +5,10 @@ import { app } from "../src/app";
 import { AuditLog } from "../src/models/auditLog";
 import { Department } from "../src/models/department";
 import { User } from "../src/models/user";
-import { accessToken, useTestDb } from "./helpers";
+import { as, useTestDb } from "./helpers";
 
 useTestDb();
 
-const as = (role: string, id?: string) => {
-  const auth = `Bearer ${accessToken(role, id)}`;
-  return {
-    get: (url: string) => request(app).get(url).set("Authorization", auth),
-    post: (url: string) => request(app).post(url).set("Authorization", auth),
-    put: (url: string) => request(app).put(url).set("Authorization", auth),
-  };
-};
 const admin = as("SUPER_ADMIN");
 const receptionist = as("RECEPTIONIST");
 
