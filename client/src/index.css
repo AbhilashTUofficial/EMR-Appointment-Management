@@ -1,1 +1,6 @@
 @import "tailwindcss";
+
+/* Edge adds its own reveal button to password boxes and it disappears after one use; Input has its own. */
+input::-ms-reveal {
+  display: none;
+}
