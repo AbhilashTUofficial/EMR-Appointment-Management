@@ -25,12 +25,26 @@ export const toPatient = (p: PatientFields) => ({
   dateOfBirth: p.dateOfBirth,
 });
 
-// Looks a patient up by patient code, by the start of a mobile number, or by the start of their name.
-// Each branch uses its own index; the name and mobile searches are anchored prefixes so they can.
+// Matches a patient whose patient ID is the term, or in whose name every word of the term starts a word.
+// "das" finds "Rohan Das" and "rohan d" does too. The indexed word list keeps this an index lookup.
+export const nameOrCodeFilter = (term: string) => ({
+  $or: [
+    { $and: term.toLowerCase().split(/\s+/).filter(Boolean).map((word) => ({ nameTokens: { $regex: `^${escapeRegex(word)}` } })) },
+    { patientCode: term.toUpperCase() },
+  ],
+});
+
+// Matches the start of a mobile number, written with or without its country code, spaces or dashes.
+export const mobileFilter = (term: string) => {
+  const digits = term.replace(/\D/g, "");
+  if (!digits) return { mobileDigits: null }; // nothing to match on, so nothing matches
+  const startsWith = { $regex: `^${digits}` };
+  return { $or: [{ mobileDigits: startsWith }, { mobileLocal: startsWith }] };
+};
+
 export async function searchPatients(term: string) {
-  const conditions: object[] = [{ nameLower: { $regex: `^${escapeRegex(term.toLowerCase())}` } }, { patientCode: term.toUpperCase() }];
-  const digits = term.replace(/[\s-]/g, "");
-  if (/^\+?\d+$/.test(digits)) conditions.push({ mobile: { $regex: `^${escapeRegex(digits)}` } });
+  const conditions: object[] = [nameOrCodeFilter(term)];
+  if (/^\+?[\d\s-]+$/.test(term)) conditions.push(mobileFilter(term));
 
   const patients = await Patient.find({ $or: conditions }).sort("nameLower").limit(10).lean();
   return patients.map(toPatient);

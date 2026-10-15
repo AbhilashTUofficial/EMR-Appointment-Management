@@ -118,6 +118,8 @@ describe("GET /appointments", () => {
     expect((await list("?patient=asha")).meta.total).toBe(2);
     expect((await list("?patient=PT-000002")).meta.total).toBe(2);
     expect((await list("?mobile=91234")).meta.total).toBe(2);
+    expect((await list("?patient=nair")).meta.total).toBe(2); // any word of the name
+    expect((await list("?mobile=%2B919123")).meta.total).toBe(0); // not Ravi: his number is stored without a country code, so it starts 9123, not 919123
     expect((await list("?patient=asha&mobile=91234")).meta.total).toBe(0);
     expect((await list("?doctor=mehta")).meta.total).toBe(1);
     expect((await list(`?doctor=anita&doctorId=${drMehta.id}`)).meta.total).toBe(0);
