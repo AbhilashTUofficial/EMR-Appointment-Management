@@ -142,6 +142,21 @@ function ScheduleEditor({ doctor }: { doctor: Doctor }) {
   );
 }
 
+// What a newly added session or break starts as: the afternoon, and a short break inside the morning.
+const newRange: Record<string, { start: string; end: string }> = {
+  session: { start: "14:00", end: "17:00" },
+  break: { start: "11:00", end: "11:15" },
+};
+
+function RangeField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block text-xs text-gray-500">
+      <span className="mb-0.5 block">{label}</span>
+      {children}
+    </label>
+  );
+}
+
 // Used for both sessions and breaks: a list of named time ranges.
 function RangeList({
   noun,
@@ -158,36 +173,25 @@ function RangeList({
 
   return (
     <div>
-      <p className="mb-1 text-sm font-medium text-gray-700">{title}</p>
+      <p className="text-sm font-medium text-gray-700">{title}</p>
+      {noun === "break" && <p className="mb-1 text-xs text-gray-500">Slots that touch a break are not offered. A break can sit inside a session or in the gap between two.</p>}
       <div className="space-y-2">
         {ranges.map((range, index) => (
-          <div key={index} className="flex flex-wrap items-center gap-2">
-            <input
-              aria-label={`${noun} name`}
-              className={`${controlClass} w-36`}
-              value={range.name}
-              onChange={(e) => update(index, { name: e.target.value })}
-            />
-            <input
-              aria-label={`${noun} start`}
-              type="time"
-              className={`${controlClass} w-32`}
-              value={range.start}
-              onChange={(e) => update(index, { start: e.target.value })}
-            />
-            <span className="text-gray-500">to</span>
-            <input
-              aria-label={`${noun} end`}
-              type="time"
-              className={`${controlClass} w-32`}
-              value={range.end}
-              onChange={(e) => update(index, { end: e.target.value })}
-            />
+          <div key={index} className="grid gap-2 sm:grid-cols-[10rem_8rem_8rem_auto] sm:items-end">
+            <RangeField label="Name">
+              <input aria-label={`${noun} name`} className={controlClass} value={range.name} onChange={(e) => update(index, { name: e.target.value })} />
+            </RangeField>
+            <RangeField label="From">
+              <input aria-label={`${noun} start`} type="time" className={controlClass} value={range.start} onChange={(e) => update(index, { start: e.target.value })} />
+            </RangeField>
+            <RangeField label="To">
+              <input aria-label={`${noun} end`} type="time" className={controlClass} value={range.end} onChange={(e) => update(index, { end: e.target.value })} />
+            </RangeField>
             <button
               type="button"
               aria-label={`Remove ${noun} ${index + 1}`}
               onClick={() => onChange(ranges.filter((_, i) => i !== index))}
-              className="px-2 text-sm text-red-600 hover:underline"
+              className="justify-self-start px-2 py-2 text-sm text-red-600 hover:underline"
             >
               Remove
             </button>
@@ -196,7 +200,7 @@ function RangeList({
       </div>
       <button
         type="button"
-        onClick={() => onChange([...ranges, { name: noun[0].toUpperCase() + noun.slice(1), start: "09:00", end: "10:00" }])}
+        onClick={() => onChange([...ranges, { name: noun[0].toUpperCase() + noun.slice(1), ...newRange[noun] }])}
         className="mt-2 text-sm text-blue-700 hover:underline"
       >
         + Add {noun}

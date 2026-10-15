@@ -26,6 +26,7 @@ export default function Appointments() {
   const actions = useAppointmentActions();
   const today = useSummary().data?.date; // the clinic's date, which decides when a patient can be marked as arrived
   const [editing, setEditing] = useState<Appointment | null>(null);
+  const [showFilters, setShowFilters] = useState(false); // on a phone the filters start folded away
 
   const sortColumn = params.get("sortBy") ?? "date";
   const sortOrder = params.get("order") ?? "desc";
@@ -63,6 +64,10 @@ export default function Appointments() {
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold">Appointments</h1>
 
+      <Button type="button" variant="secondary" className="sm:hidden" aria-expanded={showFilters} onClick={() => setShowFilters((open) => !open)}>
+        {showFilters ? "Hide filters" : "Show filters"}
+      </Button>
+
       {/* Remounted when the filters in the URL change (for example from a link), so the inputs show what is applied. */}
       <form
         key={filterNames.map((name) => params.get(name)).join("|")}
@@ -70,7 +75,7 @@ export default function Appointments() {
           e.preventDefault();
           applyFilters(new FormData(e.currentTarget));
         }}
-        className="grid gap-3 rounded-lg border border-gray-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4"
+        className={`gap-3 rounded-lg border border-gray-200 bg-white p-4 sm:grid sm:grid-cols-2 lg:grid-cols-4 ${showFilters ? "grid" : "hidden"}`}
       >
         <Input label="Patient name or ID" name="patient" defaultValue={params.get("patient") ?? ""} />
         <Input label="Mobile number" name="mobile" defaultValue={params.get("mobile") ?? ""} />
@@ -126,7 +131,7 @@ export default function Appointments() {
                     Status{arrow("status")}
                   </button>
                 </th>
-                <th className="px-3 py-2 font-medium">Actions</th>
+                <th className="sticky right-0 bg-gray-50 px-3 py-2 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">

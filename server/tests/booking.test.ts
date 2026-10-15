@@ -77,7 +77,20 @@ describe("GET /patients", () => {
 
   it("finds patients by the start of their mobile number", async () => {
     expect(names(await search("98765"))).toEqual(["Asha Nair", "Ravi Menon"]);
-    expect(names(await search("+91"))).toEqual([]);
+    expect(names(await search("+44"))).toEqual([]);
+  });
+
+  it("finds a patient by any word of their name", async () => {
+    expect(names(await search("nair"))).toEqual(["Asha Nair"]);
+    expect(names(await search("menon ravi"))).toEqual(["Ravi Menon"]);
+    expect(names(await search("kum"))).toEqual(["Ashok Kumar"]);
+  });
+
+  it("finds a patient by their mobile number with or without the country code", async () => {
+    await Patient.create({ patientCode: "PT-000004", name: "Rohan Das", mobile: "+91 90000-11111", gender: "MALE" });
+    for (const term of ["9000011111", "90000", "+919000011111", "+91 90000 11", "91-90000"]) {
+      expect(names(await search(term)), term).toEqual(["Rohan Das"]);
+    }
   });
 
   it("treats the search text literally, not as a pattern", async () => {

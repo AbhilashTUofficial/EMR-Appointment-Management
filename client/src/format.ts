@@ -5,3 +5,12 @@ export const formatDate = (date: string) =>
 // Today's date as YYYY-MM-DD in the browser's timezone. The server decides what counts as "today"
 // for anything that matters; this only picks defaults and which buttons to offer.
 export const today = () => new Date().toLocaleDateString("en-CA");
+
+// Whole years since a date of birth ("1990-05-01" or a full ISO date), or undefined when it isn't known.
+export function age(dateOfBirth?: string) {
+  if (!dateOfBirth) return undefined;
+  const born = new Date(dateOfBirth);
+  const now = new Date();
+  const birthdayPassed = now.getMonth() > born.getUTCMonth() || (now.getMonth() === born.getUTCMonth() && now.getDate() >= born.getUTCDate());
+  return now.getFullYear() - born.getUTCFullYear() - (birthdayPassed ? 0 : 1);
+}

@@ -10,7 +10,7 @@ import { escapeRegex, isDuplicateKeyError } from "../utils/mongo";
 import { clinicNow } from "../utils/time";
 import type { CreateAppointmentInput, ListAppointmentsQuery, UpdateAppointmentInput } from "../validators/appointment";
 import { logAudit } from "./auditService";
-import { createPatient, deletePatient, getPatient, toPatient, type PatientFields } from "./patientService";
+import { createPatient, deletePatient, getPatient, mobileFilter, nameOrCodeFilter, toPatient, type PatientFields } from "./patientService";
 import { generateSchedule, hasPassed } from "./slotService";
 
 type Viewer = { id: string; role: Role };
@@ -108,10 +108,8 @@ export async function listAppointments(query: ListAppointmentsQuery, viewer: Vie
 
   // Searching by patient or doctor first finds the matching ids (only when asked for), so listing stays one query.
   const patientFilters: object[] = [];
-  if (query.patient) {
-    patientFilters.push({ $or: [{ nameLower: { $regex: `^${escapeRegex(query.patient.toLowerCase())}` } }, { patientCode: query.patient.toUpperCase() }] });
-  }
-  if (query.mobile) patientFilters.push({ mobile: { $regex: `^${escapeRegex(query.mobile.replace(/[\s-]/g, ""))}` } });
+  if (query.patient) patientFilters.push(nameOrCodeFilter(query.patient));
+  if (query.mobile) patientFilters.push(mobileFilter(query.mobile));
   if (patientFilters.length) {
     const patients = await Patient.find({ $and: patientFilters }).select("_id").limit(1000).lean();
     filter.patientId = { $in: patients.map((p) => p._id) };

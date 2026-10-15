@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { updateAppointment, type Appointment } from "../api/appointments";
 import type { Role } from "../api/http";
+import { formatDate } from "../format";
 import { applyServerError } from "../forms";
 import { Button } from "./Button";
 import { ErrorAlert } from "./ErrorAlert";
@@ -54,7 +55,7 @@ export function AppointmentEditor({ appointment, role, onDone }: Props) {
   return (
     <form onSubmit={(e) => !isSubmitting && submit(e)} noValidate className="space-y-4">
       <p className="text-sm text-gray-600">
-        {appointment.patient.name} · {appointment.date} {appointment.slotStart}
+        {appointment.patient.name} · {formatDate(appointment.date)} · {appointment.slotStart}–{appointment.slotEnd}
       </p>
       {isDoctor ? (
         <Textarea label="Consultation notes" rows={6} error={errors.consultationNotes?.message} {...register("consultationNotes")} />

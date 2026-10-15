@@ -73,7 +73,7 @@ export default function Book() {
         <Link to={schedulerLink} className="text-sm text-blue-700 hover:underline">
           ← Scheduler
         </Link>
-        <h1 className="text-2xl font-semibold">Book appointment</h1>
+        <h1 className="text-2xl font-semibold">{booked ? "Appointment booked" : "Book appointment"}</h1>
         <p className="mt-1 text-sm text-gray-600">
           {doctor?.name ?? "Doctor"} · {formatDate(date)} · {slot}
         </p>
@@ -85,9 +85,17 @@ export default function Book() {
           <p>
             {booked.patient.name} ({booked.patient.patientCode}) with {booked.doctor.name} on {formatDate(booked.date)}, {booked.slotStart}–{booked.slotEnd}.
           </p>
-          <Link to={schedulerLink} className="inline-block font-medium text-green-900 underline">
-            Back to the scheduler
-          </Link>
+          <p className="flex flex-wrap gap-4 pt-1">
+            <Link to={schedulerLink} className="font-medium text-green-900 underline">
+              Book another
+            </Link>
+            <Link
+              to={`/appointments?${new URLSearchParams({ patient: booked.patient.patientCode, from: booked.date, to: booked.date })}`}
+              className="font-medium text-green-900 underline"
+            >
+              View in appointments
+            </Link>
+          </p>
         </section>
       ) : (
         <section className="space-y-4 rounded-lg border border-gray-200 bg-white p-4">
@@ -171,17 +179,13 @@ function BookingForm({ mode, slot, schedulerLink, onBooked }: FormProps) {
       <Input label="Purpose of visit" error={errors.purpose?.message} {...register("purpose")} />
       <Textarea label="Notes (optional)" error={errors.notes?.message} {...register("notes")} />
 
-      <ErrorAlert>
-        {serverError}
-        {serverError && (
-          <>
-            {" "}
-            <Link to={schedulerLink} className="font-medium underline">
+      {serverError && (
+        <ErrorAlert>
+          {serverError} <Link to={schedulerLink} className="font-medium underline">
               Back to the scheduler
             </Link>
-          </>
-        )}
-      </ErrorAlert>
+        </ErrorAlert>
+      )}
       <Button type="submit" disabled={isSubmitting}>
         {isSubmitting ? "Booking…" : "Book appointment"}
       </Button>
