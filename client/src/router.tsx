@@ -7,9 +7,11 @@ import Dashboard from "./pages/Dashboard";
 import ErrorPage from "./pages/ErrorPage";
 import Login from "./pages/Login";
 import Scheduler from "./pages/Scheduler";
-import DoctorSchedule from "./pages/admin/DoctorSchedule";
-import Doctors from "./pages/admin/Doctors";
-import Receptionists from "./pages/admin/Receptionists";
+
+// A route whose screen is only downloaded when it is first opened.
+const onDemand = (load: () => Promise<{ default: React.ComponentType }>) => ({
+  lazy: async () => ({ Component: (await load()).default }),
+});
 
 export const router = createBrowserRouter([
   { path: "/login", element: <Login />, errorElement: <ErrorPage /> },
@@ -30,9 +32,10 @@ export const router = createBrowserRouter([
           {
             element: <RequireAuth roles={["SUPER_ADMIN"]} />,
             children: [
-              { path: "/admin/doctors", element: <Doctors /> },
-              { path: "/admin/doctors/:id/schedule", element: <DoctorSchedule /> },
-              { path: "/admin/receptionists", element: <Receptionists /> },
+              // Only admins ever open these, so they load on demand.
+              { path: "/admin/doctors", ...onDemand(() => import("./pages/admin/Doctors")) },
+              { path: "/admin/doctors/:id/schedule", ...onDemand(() => import("./pages/admin/DoctorSchedule")) },
+              { path: "/admin/receptionists", ...onDemand(() => import("./pages/admin/Receptionists")) },
             ],
           },
         ],

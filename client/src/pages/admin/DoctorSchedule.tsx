@@ -196,7 +196,7 @@ function RangeList({
       </div>
       <button
         type="button"
-        onClick={() => onChange([...ranges, { name: "", start: "09:00", end: "10:00" }])}
+        onClick={() => onChange([...ranges, { name: noun[0].toUpperCase() + noun.slice(1), start: "09:00", end: "10:00" }])}
         className="mt-2 text-sm text-blue-700 hover:underline"
       >
         + Add {noun}

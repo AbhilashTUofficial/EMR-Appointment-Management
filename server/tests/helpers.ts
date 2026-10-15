@@ -20,5 +20,5 @@ export function useTestDb() {
 }
 
 // Signs an access token directly, so tests don't depend on the login flow.
-export const accessToken = (role: string, userId: string | Types.ObjectId = new Types.ObjectId()) =>
-  jwt.sign({ role }, "test-access-secret-test-access-secret", { subject: String(userId), expiresIn: 60 });
+export const accessToken = (role: string, userId: string | Types.ObjectId = new Types.ObjectId(), expiresIn = 60) =>
+  jwt.sign({ role }, "test-access-secret-test-access-secret", { subject: String(userId), expiresIn });

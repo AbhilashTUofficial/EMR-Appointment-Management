@@ -44,7 +44,7 @@ function toAppointment(a: Row, patient: PatientFields, doctor: Person, viewer: V
 // Adds the patient and doctor to a page of appointments with two lookups, however many rows there are.
 async function withPeople(rows: Row[], viewer: Viewer) {
   const [patients, doctors] = await Promise.all([
-    Patient.find({ _id: { $in: rows.map((r) => r.patientId) } }).lean(),
+    Patient.find({ _id: { $in: rows.map((r) => r.patientId) } }).select("patientCode name mobile gender dateOfBirth").lean(),
     User.find({ _id: { $in: rows.map((r) => r.doctorId) } }).select("name").lean(),
   ]);
   const patientById = new Map(patients.map((p) => [String(p._id), p]));

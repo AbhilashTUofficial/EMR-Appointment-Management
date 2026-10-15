@@ -1,18 +1,30 @@
 # Engineering Decisions
 
-Decisions are added as each part of the project is built.
+The questions the assessment asks, and where each is answered:
+
+| Question | Section |
+|---|---|
+| Why did you choose your project architecture? | [Architecture](#architecture) |
+| How did you design your MongoDB schema? | [MongoDB schema](#mongodb-schema) |
+| How did you prevent double booking? | [Preventing double booking](#preventing-double-booking) |
+| Which database indexes did you create and why? | [Indexes](#indexes) |
+| What security measures did you implement? | [Security measures](#security-measures) |
+| What performance optimizations did you apply? | [Performance optimizations](#performance-optimizations) |
+| What would change for millions of appointments? | [Scaling to millions of appointments](#scaling-to-millions-of-appointments) |
+
+The other sections explain the decisions behind individual features.
 
 ## Architecture
 
 **Modular monolith, two packages in one repo.** `server/` is a single Express app, `client/` is a single React app, joined by npm workspaces so one `npm install` and one CI run cover both. No microservices or shared packages: there is one team, one deployable API, and nothing that needs to scale independently.
 
-**Server layering: route → controller → service → model** (each layer is added when the first feature needs it). Routes only declare the URL and middleware chain. Controllers read the request and call one service. Services hold the business rules (slot validation, status transitions, booking). Models define the schemas and indexes. This keeps controllers thin and puts everything worth testing in one place. There is no repository layer: services call Mongoose directly, because a second layer over Mongoose would only forward calls.
+**Server layering: route → controller → service → model** . Routes only declare the URL and middleware chain. Controllers read the request and call one service. Services hold the business rules (slot validation, status transitions, booking). Models define the schemas and indexes. This keeps controllers thin and puts everything worth testing in one place. There is no repository layer: services call Mongoose directly, because a second layer over Mongoose would only forward calls.
 
 **Express 5.** Rejected promises in async handlers reach the error handler on their own, so no wrapper is needed around every controller.
 
 **Centralised errors and responses.** Services throw `AppError(status, code, message)`. One error middleware turns that, Zod validation errors and unknown errors into the same envelope, and unknown errors never leak internals to the client. One `sendSuccess` helper builds the success envelope.
 
-**Config is validated at boot.** `config/env.ts` parses `process.env` with Zod, so a wrong variable stops the server at startup instead of failing on the first request that needs it. Variables with no safe default (database URI, JWT secrets) are required and are added as the features that use them arrive. Node's `--env-file` flag loads `.env`, so there is no dotenv dependency.
+**Config is validated at boot.** `config/env.ts` parses `process.env` with Zod, so a wrong variable stops the server at startup instead of failing on the first request that needs it. Variables with no safe default (database URI, JWT secrets) are required and come with the features that use them. Node's `--env-file` flag loads `.env`, so there is no dotenv dependency.
 
 **Client state.** TanStack Query owns server data (caching, loading and error states, pagination, refetch on live updates). React state and the URL cover everything else. There is no global store.
 
@@ -44,7 +56,7 @@ Each index is there for a query the screens will run:
 - `patients.patientCode` (unique), `patients.mobile`, `patients.nameLower`: the three ways receptionists look a patient up.
 - `appointments {doctorId, date, slotStart}` (unique, partial on `isActive: true`): prevents double booking and doubles as the lookup of one doctor's bookings on a date. Cancelled appointments are left out, so the index stays small and a cancelled slot can be booked again.
 - `appointments {doctorId, date, status}`: a doctor's own list, including cancelled, and status filters.
-- `appointments {date, slotStart}`: date-range lists across doctors and the default sort.
+- `appointments {date, slotStart, _id}`: date-range lists across doctors and the default sort. It ends in `_id`, the last sort key, so the default list needs no in-memory sorting.
 - `appointments {departmentId, date}`: department filter.
 - `appointments {patientId, date desc}`: looking up a patient's appointments.
 - `refreshtokens.tokenHash` (unique): token lookup. `refreshtokens.userId`: revoke all of a user's tokens in one query. `refreshtokens.expiresAt` (TTL): MongoDB deletes expired tokens by itself.
@@ -96,7 +108,7 @@ Not every filter combination is indexed. Each extra index slows down writes, so 
 
 **One schedule per doctor, replaced as a whole.** `PUT /doctors/:id/schedule` takes the complete schedule instead of per-day or per-session endpoints. The editor always shows the whole week, so a single request is simpler and keeps the stored schedule consistent: it is either the old one or the new one, never half of each.
 
-**Schedule rules are checked on the server.** The slot generator in the next step relies on well-formed input, so bad schedules are rejected up front: end before start, overlapping sessions or breaks, a repeated day, and slot lengths outside 5-120 minutes. The client doesn't repeat these rules; it shows the server's messages in plain language, and only offers slot lengths from a fixed list.
+**Schedule rules are checked on the server.** The slot generator relies on well-formed input, so bad schedules are rejected up front: end before start, overlapping sessions or breaks, a repeated day, and slot lengths outside 5-120 minutes. The client doesn't repeat these rules; it shows the server's messages in plain language, and only offers slot lengths from a fixed list.
 
 **A break can sit inside a session or in the gap between two.** The assessment's example (09:00-12:00, lunch 12:00-13:00, 13:00-17:00) is the gap case, but a tea break inside a session works the same way, so breaks are stored per day next to sessions.
 
@@ -184,7 +196,7 @@ The summary is one aggregation over today's appointments (by clinic date, for a 
 
 ## Keeping the screen in step
 
-After arrive, cancel or complete, the client refetches the appointment lists, the scheduler's slots and the dashboard counts, so every screen shows the same thing. Live updates for other users' changes are added in the real-time step.
+After arrive, cancel or complete, the client refetches the appointment lists, the scheduler's slots and the dashboard counts, so every screen shows the same thing. Changes made by other users arrive through the live updates described in the next section.
 
 ## Real-time updates
 
@@ -205,4 +217,69 @@ After arrive, cancel or complete, the client refetches the appointment lists, th
 **Where the refetching lives.** One hook, mounted once in the app layout, listens for the events and invalidates the cached queries for slots, appointments and the dashboard. Only queries that are currently on screen refetch; the others are just marked stale. Screens need no code of their own to stay current.
 
 **Known limits.** A socket is authorized when it connects. If a user is deactivated, or their token expires while they stay connected, the connection keeps working until it drops. With more than one server instance, Socket.IO needs a shared adapter (for example Redis) so an event reaches users connected to a different instance; the scaling notes cover this.
+
+## Security measures
+
+What was implemented, and the section with the detail:
+
+- **Passwords** are hashed with bcrypt (cost 12). The hash is excluded from queries by default and never appears in a response. Passwords are limited by bytes, not characters, because bcrypt silently ignores anything past 72 bytes. (Authentication)
+- **Tokens:** short-lived access tokens and single-use, hashed, rotating refresh tokens in an httpOnly, SameSite=Strict cookie; separate signing secrets, the algorithm pinned, and reuse of a refresh token ends all of that user's sessions. (Authentication, Client authentication)
+- **Authorization on the server:** every protected route names the roles allowed; doctors are scoped to their own data inside the services, and another doctor's data is a `404`. A test checks every endpoint against every role.
+- **Input validation:** every body, query and id is validated with Zod before it reaches a service. Unknown fields are dropped, so a request can't set fields like a role or an `isActive` flag. Search text is escaped and sort fields are chosen from a fixed list, so queries can't be steered.
+- **Browser protection:** one allowed CORS origin, Helmet's security headers, Express's default 100 KB limit on request bodies, and the refresh token is never readable by scripts.
+- **Brute force:** login is limited to 10 failed attempts per 15 minutes per IP address, answers the same way for every kind of failure, and compares passwords even for unknown emails so response time doesn't reveal which emails exist.
+- **Secrets and configuration:** all secrets come from environment variables, are checked at startup (length, different from each other), and are never committed. The seed script refuses to run in production.
+- **No leaking:** error responses never include stack traces, database errors or token details; unexpected errors return a generic message and are logged on the server. Responses are built field by field, and consultation notes are withheld from receptionists.
+- **Live connections** require the same valid access token as the API, rooms limit who hears what, and events carry no patient data.
+- **Audit trail** of logins, failed logins and every change to users, schedules, patients and appointments.
+
+Not done, on purpose: field-level encryption, CSRF tokens beyond SameSite, account lockout tables and two-factor authentication. They are real needs for a production EMR but are beyond this module, and the limits that remain (for example a deactivated user's token living for up to 15 minutes) are listed in the README.
+
+## Performance optimizations
+
+Each optimization and why it was needed.
+
+**Backend and database**
+
+- **Indexes for the queries the screens run** (see Indexes). Without them, slot lookups, doctor lists and date-range lists would scan every appointment.
+- **The slot index doubles as the booking lookup.** The partial unique index is also what "who is booked for this doctor on this date" uses, so the guard against double booking costs no extra index and stays small, because cancelled appointments are left out.
+- **Server-side paging with a cap.** A page is at most 50 rows and at most page 10,000, so response size and the work the database does are bounded whatever a client asks for.
+- **Fixed number of queries per page.** A list is one query, one count, and one lookup each for the patients and doctors on that page, instead of a lookup per row.
+- **Count and page run together,** so the total costs no extra waiting. An unfiltered total uses the collection's own estimate instead of a scan.
+- **Lean reads.** Reads return plain objects instead of full Mongoose documents, the patient lookup for a page selects only the fields a row shows, and responses are built field by field.
+- **Slots are calculated, not stored.** There is nothing to regenerate when a schedule changes and no stale rows. A day costs one indexed lookup for its bookings.
+- **Prefix searches** on patient names, mobile numbers and patient IDs use their indexes. The search text is anchored at the start so the index can be used.
+- **One aggregation for the dashboard,** bounded to a single day, instead of loading appointments and counting in the application.
+- **Index builds are awaited at startup,** so the server never takes bookings before the unique slot index exists.
+- **Live updates instead of polling.** Screens stay current through small events, so nothing polls the API.
+
+**Frontend**
+
+- **TanStack Query caching.** Data that was just shown is reused, departments are cached for the whole session, and pages of a list keep the previous page on screen while the next one loads.
+- **Targeted invalidation.** After a change, only the slots, appointment and dashboard queries are refetched, and only the ones on screen.
+- **Debounced patient search,** so typing doesn't send a request per key.
+- **`React.memo` on slot buttons,** with a stable click handler. A refetch returns the same slot objects for slots that didn't change, so only the changed ones re-render. This is the one place with enough repeated small elements to benefit; memoization is not used elsewhere.
+- **Admin screens load on demand.** The doctor, schedule and receptionist pages are separate chunks that only admins download. They are small (about 9 kB), so the gain is modest; the main bundle (about 540 kB, mostly libraries) is the bigger target and has not been split.
+- **Filters in the URL** and an uncontrolled filter form, so typing in a filter field re-renders nothing until Apply.
+
+## Scaling to millions of appointments
+
+The design already holds up for one clinic. For millions of appointments, in the order the problems would appear:
+
+1. **Query patterns first.**
+   - Deep `skip` paging gets slower the further it goes; switch to cursor paging on `(date, slotStart, _id)`.
+   - Filtered lists are sorted in memory today. Add compound indexes that pair each common filter with the sort (for example doctor, date, slot) and use `explain()` on production-sized data to confirm.
+   - Name search is a prefix match. Move it to a search index (Atlas Search or similar) that matches any word, and stop looking up matching patient ids first.
+2. **Denormalize the search fields.** Copy the patient name and mobile and the doctor name onto the appointment, so searching and listing is one indexed query. The cost is duplicated data that has to be kept in step, acceptable for fields that rarely change.
+3. **Archive old data.** Move appointments older than a retention period to a cold collection, and put a retention period on the audit log, so the hot collection stays small and its indexes stay in memory.
+4. **Database scaling.**
+   - Run a replica set for availability, and send read-heavy queries (reports, the dashboard, the audit log) to secondaries while bookings stay on the primary.
+   - Shard only if one replica set can no longer hold the data. A shard key of doctor and date keeps the double-booking index inside one shard, because a unique index has to include the shard key.
+5. **Cache what rarely changes.** Doctor schedules and departments in Redis, and short-lived cached slot grids, invalidated by the same events that drive the live updates.
+6. **API tier.** It is already stateless (access tokens are verified without a database lookup, refresh tokens are in MongoDB), so it scales by running more instances behind a load balancer.
+7. **Live updates across instances.** Add the Socket.IO Redis adapter so an event reaches users connected to any instance, and use sticky sessions for the long-polling transport.
+8. **Background work.** Move audit writes, reminders and notifications to a queue so they never sit on the booking path.
+9. **Observability.** Structured logs, metrics on the rate of `409` booking conflicts and on slow queries, and alerts on both.
+
+None of this is built; it is the answer to "what would you change", and each step is a response to a measured problem, not something to add up front.
 
