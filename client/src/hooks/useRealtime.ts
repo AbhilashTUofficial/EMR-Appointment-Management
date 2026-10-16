@@ -4,6 +4,9 @@ import { io } from "socket.io-client";
 import { getAccessToken, refreshSession } from "../api/http";
 import { invalidateAppointmentData } from "./invalidate";
 
+// Hosts that can't keep a WebSocket open (serverless) build with VITE_LIVE_UPDATES=poll and refetch on a timer instead.
+const POLL_MS = 10_000;
+
 const appointmentEvents = ["appointment:created", "appointment:updated", "appointment:cancelled"];
 
 // Keeps open screens current. The server only says that something changed; this refetches
@@ -15,6 +18,12 @@ export function useRealtime() {
 
   useEffect(() => {
     const refetch = () => invalidateAppointmentData(queryClient);
+
+    if (import.meta.env.VITE_LIVE_UPDATES === "poll") {
+      const timer = setInterval(() => document.visibilityState === "visible" && refetch(), POLL_MS);
+      return () => clearInterval(timer);
+    }
+
     let renewedToken = false;
     let connectedBefore = false;
 
