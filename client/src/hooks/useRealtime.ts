@@ -4,6 +4,9 @@ import { io } from "socket.io-client";
 import { getAccessToken, refreshSession } from "../api/http";
 import { invalidateAppointmentData } from "./invalidate";
 
+// Hosts that can't keep a WebSocket open (serverless) build with VITE_LIVE_UPDATES=poll and refetch on a timer instead.
+const POLL_MS = 10_000;
+
 const appointmentEvents = ["appointment:created", "appointment:updated", "appointment:cancelled"];
 
 // Keeps open screens current. The server only says that something changed; this refetches
@@ -15,12 +18,17 @@ export function useRealtime() {
 
   useEffect(() => {
     const refetch = () => invalidateAppointmentData(queryClient);
+
+    if (import.meta.env.VITE_LIVE_UPDATES === "poll") {
+      const timer = setInterval(() => document.visibilityState === "visible" && refetch(), POLL_MS);
+      return () => clearInterval(timer);
+    }
+
     let renewedToken = false;
     let connectedBefore = false;
 
     // The callback runs on every (re)connection, so a reconnect uses the current access token.
-    // On Vercel the live connection goes straight to the API host (Vercel cannot proxy WebSockets); elsewhere it shares the page origin.
-    const socket = io(import.meta.env.VITE_SOCKET_URL || undefined, { auth: (send) => send({ token: getAccessToken() }) });
+    const socket = io({ auth: (send) => send({ token: getAccessToken() }) });
 
     // Renews the access token (shared with API calls) and connects again. If that fails the session
     // is over, and the API calls will say so.

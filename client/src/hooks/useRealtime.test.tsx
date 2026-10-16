@@ -108,4 +108,24 @@ describe("useRealtime", () => {
     mount().unmount();
     expect(mocks.socket.disconnect).toHaveBeenCalled();
   });
+
+  it("polls instead of opening a connection when built for a host without WebSockets", () => {
+    vi.stubEnv("VITE_LIVE_UPDATES", "poll");
+    vi.useFakeTimers();
+    try {
+      const { unmount } = mount();
+      expect(mocks.handlers.size).toBe(0);
+      expect(invalidated()).toEqual([]);
+
+      vi.advanceTimersByTime(10_000);
+      expect(invalidated()).toEqual(["slots", "appointments", "dashboard"]);
+
+      unmount();
+      vi.advanceTimersByTime(30_000);
+      expect(invalidated()).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+    }
+  });
 });
