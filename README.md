@@ -113,7 +113,7 @@ docker compose up --build  # app on http://localhost:8080
 docker compose exec server node server/dist/scripts/seed.js
 ```
 
-This starts MongoDB, the API and the web app behind nginx, which serves the built client and forwards `/api` and `/socket.io` to the API. It is a local demo setup (MongoDB without authentication, `NODE_ENV=development` so the seed script may run); it has not been run in the environment this project was developed in, so treat it as untested.
+This starts MongoDB, the API and the web app behind nginx, which serves the built client and forwards `/api` and `/socket.io` to the API. It is a local demo setup (MongoDB without authentication, `NODE_ENV=development` so the seed script may run); it was built and run end to end with Docker Desktop (containers up, demo accounts seeded, sign-in and live updates working through nginx).
 
 ## Environment variables
 
@@ -355,7 +355,7 @@ Logins (successful and failed), logouts, user creation, schedule changes, patien
 - Only login is rate limited, and the main JavaScript bundle (about 540 kB, mostly libraries) is not split further.
 - The audit log is written but there is no screen or endpoint to read it.
 - Filters are kept in the page address (so a list can be bookmarked), which means a patient's name or number can end up in the browser history. The app sends no `Referer` header to other sites, but anyone using the same browser profile can see the history.
-- The Docker setup was not run in the environment this was built in. There is no "no-show" status: a patient who never arrives stays `SCHEDULED` until someone cancels it.
+- There is no "no-show" status: a patient who never arrives stays `SCHEDULED` until someone cancels it.
 
 ## Future improvements
 
